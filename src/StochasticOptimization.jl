@@ -1,5 +1,7 @@
 module StochasticOptimization
 
-# package code goes here
+using LearnBase
+
+include("paramupdater.jl")
 
 end # module
