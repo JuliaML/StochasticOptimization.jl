@@ -1,7 +1,10 @@
 module StochasticOptimization
 
-using LearnBase
+importall LearnBase
+@reexport using LearnBase
 
-include("paramupdater.jl")
+include("learn.jl")
+include("grad_descent.jl")
+# include("stochastic_methods.jl")
 
 end # module
