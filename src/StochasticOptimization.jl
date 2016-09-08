@@ -34,7 +34,7 @@ abstract LearningRate
 #   - a strategy holds an approach and the state
 
 
-function learn!(strat::LearningStrategy, t::Minimizable, data::DataIterator)
+function learn!(t::Minimizable, strat::LearningStrategy, data::DataIterator)
     # an available callback
     pre_hook(strat, t)
 
