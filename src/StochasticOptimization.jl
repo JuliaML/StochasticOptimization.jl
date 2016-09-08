@@ -1,106 +1,115 @@
+__precompile__(true)
+
 module StochasticOptimization
 
 using Reexport
 @reexport using LearnBase
-import LearnBase: update!
+@reexport using MLDataUtils
 using Parameters
-import IterationManagers
-const IM = IterationManagers
-import OnlineStats: Diff, Mean, Variance, fit!, ExponentialWeight
-
-# export
-#     AbstractLearner,
-#     AbstractLearnerState
-
-# abstract AbstractLearner
-# abstract AbstractLearnerState
 
 
-# TODO: implement this:
+import LearnBase: learn!, update!
+# import IterationManagers
+# const IM = IterationManagers
+# import OnlineStats: Diff, Mean, Variance, fit!, ExponentialWeight
 
-# function managed_iteration!{T<:AbstractArray}(f!::Base.Callable,
-#                                               mgr::IterationManager,
-#                                               dest::T,
-#                                               istate::IterationState{T};
-#                                               by::Base.Callable=default_by)
-#     pre_hook(mgr, istate)
-
-#     while !(finished(mgr, istate))
-#         f!(dest, istate.prev)
-#         update!(istate, dest; by=by)
-#         iter_hook(mgr, istate)
-#     end
-
-#     post_hook(mgr, istate)
-#     istate
-# end
-
-# ---------------------------------------------------------------------------------
-
-# abstract ConvergenceCheck
-# IM.finished(check::ConvergenceCheck, state) = error("You should implement a finished method for this convergence check: $check $state")
-
-# ""
-# type ErrorCheck <: ConvergenceCheck
-#     minerr::Float64
-#     lasterr::Float64
-# end
-# function IM.finished(check::ErrorCheck, err::Float64)
-#     diff = err - lasterr
-#     check.lasterr = err
-# end
-
-# ---------------------------------------------------------------------------------
 
 export
-    AbstractLearningRate,
+    LearningStrategy,
+    SGD,
+
+    LearningRate,
     FixedLR,
     AdaptiveLR
 
+"Holds optimizer state and parameters"
+abstract LearningStrategy
+
 "Enacts a strategy to adjust the learning rate"
-abstract AbstractLearningRate
+abstract LearningRate
 
-@with_kw immutable FixedLR <: AbstractLearningRate
-    lr::Float64 = 1e-2
-end
-update!(lr::FixedLR, err) = lr
+# ---------------------------------------------------------------------------------
 
-
-"Adapts learning rate based on relative variance of the changes in the test error"
-@with_kw type AdaptiveLR <: AbstractLearningRate
-    lr::Float64 = 1e-2
-    ε::Diff{Float64} = Diff()
-    lookback::Int = 20
-    σ²::Variance{BoundedEqualWeight} = Variance(BoundedEqualWeight(lookback))
-    adjpct::Float64 = 1e-2
-    cutoff::Float64 = 1e-1
-end
+# NOTES:
+#   - a strategy holds an approach and the state
 
 
-# if the error is decreasing at a large rate relative to the variance, increase the learning rate (speed it up)
-function update!(lr::AdaptiveLR, err)
-    fit!(lr.ε, err)
-    fit!(lr.σ², diff(lr.ε))
-    μ = mean(lr.σ²)
-    σ = std(lr.σ²)
-    if σ > 0
-        pct = lr.adjpct * (μ / σ < -lr.cutoff ? 1.0 : -1.0)
-        lr.lr *= (1.0 + pct)
+function learn!(strat::LearningStrategy, t::Minimizable, data::DataIterator)
+    # an available callback
+    pre_hook(strat, t)
+
+    dstate = start(data)
+    while !done(data, dstate) && !finished(strat, t)
+        # update the transformation with the next data point
+        (input, target), dstate = next(data, dstate)
+        transform!(t, target, input)
+        grad!(t)
+
+        # update the parameters and state
+        update!(strat, t)
+
+        # an available callback
+        iter_hook(strat, t)
     end
-    lr
+
+    # an available callback
+    post_hook(strat, t)
+    return
 end
 
+# fallbacks don't do anything
+pre_hook(strat, t) = return
+iter_hook(strat, t) = return
+post_hook(strat, t) = return
+
+
+# ---------------------------------------------------------------------------------
+
+# TODO: split into composable strategies... something like pub/sub maybe?
+# A "CEO" should hold the Minimizable that we're learning as well as all the strategies that apply
+
+@with_kw type SGD{T, LR <: LearningRate} <: LearningStrategy
+    lr::LR = FixedLR(1e-2)
+    mom::T = T(0.5) # momentum
+    niter::Int = 0
+    maxiter::Int = 100
+    last_Δ::Vector{T}
+end
+SGD{T}(::Type{T}, n::Int) = SGD{T}(last_Δ = zeros(T,n))
+
+function update!(strat::SGD, t::Minimizable)
+    θ = params(t)
+    ∇ = grad(t)
+    η = value(strat.lr)
+    for (i,j,k) in zip(eachindex(θ), eachindex(∇), eachindex(strat.last_Δ))
+        chg = -η * ∇[j] + strat.mom * strat.last_Δ[k]
+        θ[i] += chg
+        strat.last_Δ[k] = chg
+    end
+end
+
+# TODO: something worthwhile
+function finished(strat::SGD, t)
+    strat.niter += 1
+    strat.niter >= strat.maxiter
+end
+
+# ---------------------------------------------------------------------------------
+
+
+
+include("learningrates.jl")
 
 # ---------------------------------------------------------------------------------
 
 # type SGDManager <: IM.IterationManager end
 
-@with_kw type SGDState{LR <: AbstractLearningRate, T <: Number} <: IM.IterationState
-    lr::LR = FixedLR(1e-2)
-    mom::T = 0.5 # momentum
-    x::Vector{T}
-    ∇::Vector{T} = zeros(T, n)
-end
+# @with_kw type SGDState{LR <: LearningRate, T <: Number} <: IM.IterationState
+#     lr::LR = FixedLR(1e-2)
+#     mom::T = T(0.5) # momentum
+#     x::Vector{T}
+#     ∇::Vector{T} = zeros(T, n)
+# end
 
 # ---------------------------------------------------------------------------------
 
