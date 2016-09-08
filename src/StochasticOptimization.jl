@@ -4,11 +4,12 @@ module StochasticOptimization
 
 using Reexport
 @reexport using LearnBase
+@reexport using ObjectiveFunctions
 @reexport using MLDataUtils
 using Parameters
 
 
-import LearnBase: learn!, update!
+import LearnBase: value, learn!, update!
 # import IterationManagers
 # const IM = IterationManagers
 # import OnlineStats: Diff, Mean, Variance, fit!, ExponentialWeight
@@ -24,6 +25,7 @@ export
 
 "Holds optimizer state and parameters"
 abstract LearningStrategy
+abstract GradientDescent <: LearningStrategy
 
 "Enacts a strategy to adjust the learning rate"
 abstract LearningRate
@@ -34,28 +36,45 @@ abstract LearningRate
 #   - a strategy holds an approach and the state
 
 
-function learn!(t::Minimizable, strat::LearningStrategy, data::DataIterator)
-    # an available callback
-    pre_hook(strat, t)
+# loop through batches checking for early stopping after each batch
+function learn!(model, strategy, data::BatchIterator)
+    pre_hook(strategy, model)
+    for batch in data
+        # update the params for this batch
+        learn!(model, strategy, batch)
 
-    dstate = start(data)
-    while !done(data, dstate) && !finished(strat, t)
-        # update the transformation with the next data point
-        (input, target), dstate = next(data, dstate)
-        transform!(t, target, input)
-        grad!(t)
-
-        # update the parameters and state
-        update!(strat, t)
-
-        # an available callback
-        iter_hook(strat, t)
+        iter_hook(strategy, model)
+        finished(strategy, model) && break
     end
-
-    # an available callback
-    post_hook(strat, t)
-    return
+    post_hook(strategy, model)
 end
+
+# TODO: split into composable strategies... something like pub/sub maybe?
+# A "CEO" should hold the Minimizable that we're learning as well as all the strategies that apply
+
+
+# function learn!(t::Minimizable, strat::LearningStrategy, data::DataIterator)
+#     # an available callback
+#     pre_hook(strat, t)
+#
+#     dstate = start(data)
+#     while !done(data, dstate) && !finished(strat, t)
+#         # update the transformation with the next data point
+#         (input, target), dstate = next(data, dstate)
+#         transform!(t, target, input)
+#         grad!(t)
+#
+#         # update the parameters and state
+#         update!(strat, t)
+#
+#         # an available callback
+#         iter_hook(strat, t)
+#     end
+#
+#     # an available callback
+#     post_hook(strat, t)
+#     return
+# end
 
 # fallbacks don't do anything
 pre_hook(strat, t) = return
@@ -65,21 +84,58 @@ post_hook(strat, t) = return
 
 # ---------------------------------------------------------------------------------
 
-# TODO: split into composable strategies... something like pub/sub maybe?
-# A "CEO" should hold the Minimizable that we're learning as well as all the strategies that apply
+function learn!(model, strategy::GradientDescent, batch::Batch)
+    θ = params(model)
+    ∇ = grad(model)
+    ∇avg = zeros(θ)
+    scalar = 1 / length(batch)
+    for (input,target) in batch
+        # forward and backward passes for this datapoint
+        transform!(model, target, input)
+        grad!(model)
 
-@with_kw type SGD{T, LR <: LearningRate} <: LearningStrategy
-    lr::LR = FixedLR(1e-2)
-    mom::T = T(0.5) # momentum
-    niter::Int = 0
-    maxiter::Int = 100
+        # add to the total param change for this strategy/gradient
+        for (i,j) in zip(eachindex(∇avg), eachindex(∇))
+            ∇avg[i] += ∇[j] * scalar
+        end
+    end
+
+    # update the params using the average gradient
+    update!(θ, strategy, ∇avg)
+end
+
+
+# ---------------------------------------------------------------------------------
+
+# @with_kw type SGD{T, LR <: LearningRate} <: GradientDescent
+#     lr::LR = FixedLR(1e-2)
+#     mom::T = T(0.5) # momentum
+#     niter::Int = 0
+#     maxiter::Int = 100
+#     n::Int
+#     last_Δ::Vector{T} = zeros(T,n)
+# end
+# # SGD{T}(::Type{T}, n::Int) = SGD{T}(last_Δ = zeros(T,n))
+# SGD{T}(::Type{T}, n::Int) = SGD{T}(n=n)
+# SGD(n::Int) = SGD(Float64, n)
+
+type SGD{T, LR <: LearningRate} <: GradientDescent
+    lr::LR
+    mom::T # momentum
+    niter::Int
+    maxiter::Int
     last_Δ::Vector{T}
 end
-SGD{T}(::Type{T}, n::Int) = SGD{T}(last_Δ = zeros(T,n))
+# SGD{T}(::Type{T}, n::Int) = SGD{T}(last_Δ = zeros(T,n))
+function SGD{T}(::Type{T}, n::Int;
+                lr = FixedLR(1e-2),
+                mom = T(0.5),
+                maxiter = 100)
+    SGD{T,typeof(lr)}(lr, mom, 0, maxiter, zeros(T,n))
+end
+SGD(n::Int; kw...) = SGD(Float64, n; kw...)
 
-function update!(strat::SGD, t::Minimizable)
-    θ = params(t)
-    ∇ = grad(t)
+function update!(θ::AbstractVector, strat::SGD, ∇::AbstractVector)
     η = value(strat.lr)
     for (i,j,k) in zip(eachindex(θ), eachindex(∇), eachindex(strat.last_Δ))
         chg = -η * ∇[j] + strat.mom * strat.last_Δ[k]

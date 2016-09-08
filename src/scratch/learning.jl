@@ -39,6 +39,8 @@ function learn!(model, strategy, batch::Batch)
     update!(θ, strategy, ∇avg)
 end
 
+# NOTE: a strategy would have to implement update! and finished... the rest is optional
+
 
 # do a kfolds training
 
