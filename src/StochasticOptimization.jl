@@ -17,7 +17,14 @@ import LearnBase: value, learn!, update!
 
 export
     LearningStrategy,
+    MasterLearner,
+    MaxIter,
     SGD,
+
+    pre_hook,
+    iter_hook,
+    post_hook,
+    finished,
 
     LearningRate,
     FixedLR,
@@ -32,12 +39,70 @@ abstract LearningRate
 
 # ---------------------------------------------------------------------------------
 
+# fallbacks don't do anything
+pre_hook(strat::LearningStrategy, model)      = return
+iter_hook(strat::LearningStrategy, model)     = return
+post_hook(strat::LearningStrategy, model)     = return
+finished(strat::LearningStrategy, model)      = false
+learn!(model, strat::LearningStrategy, data)  = return
+
+# ---------------------------------------------------------------------------------
+
+# Meta-learner that can compose sub-managers of optimization components in a type-stable way.
+# A sub-manager is any LearningStrategy, and may implement any subset of callbacks.
+type MasterLearner{MGRS <: Tuple}
+    managers::MGRS
+end
+
+function MasterLearner(mgrs::LearningStrategy...)
+    MasterLearner(mgrs)
+end
+
+pre_hook(master::MasterLearner,  model) = foreach(mgr -> pre_hook(mgr, model),  master.managers)
+iter_hook(master::MasterLearner, model) = foreach(mgr -> iter_hook(mgr, model), master.managers)
+post_hook(master::MasterLearner, model) = foreach(mgr -> post_hook(mgr, model), master.managers)
+finished(master::MasterLearner,  model) = any(mgr     -> finished(mgr, model),  master.managers)
+
+function learn!(model, master::MasterLearner, data)
+    for mgr in master.managers
+        learn!(model, mgr, data)
+    end
+end
+
+# TODO: can we instead use generated functions for each MasterLearner callback so that they are ONLY called for
+#   those methods which the manager explicitly implements??  We'd need to have a type-stable way
+#   of checking whether that manager implements that method.
+
+# @generated function pre_hook(master::MasterLearner, model)
+#     body = quote end
+#     mgr_types = master.parameters[1]
+#     for (i,T) in enumerate(mgr_types)
+#         if is_implemented(T, :pre_hook)
+#             push!(body.args, :(pre_hook(master.managers[$i], model)))
+#         end
+#     end
+#     body
+# end
+
+
+# ---------------------------------------------------------------------------------
+
+@with_kw type MaxIter <: LearningStrategy
+    niter::Int = 1
+    maxiter::Int = 100
+end
+
+iter_hook(strat::MaxIter, model) = (strat.niter += 1)
+finished(strat::MaxIter, model) = strat.niter > strat.maxiter
+
+# ---------------------------------------------------------------------------------
+
 # NOTES:
 #   - a strategy holds an approach and the state
 
 
 # loop through batches checking for early stopping after each batch
-function learn!(model, strategy, data::BatchIterator)
+function learn!(model, strategy::LearningStrategy, data::BatchIterator)
     pre_hook(strategy, model)
     for batch in data
         # update the params for this batch
@@ -75,11 +140,6 @@ end
 #     post_hook(strat, t)
 #     return
 # end
-
-# fallbacks don't do anything
-pre_hook(strat, t) = return
-iter_hook(strat, t) = return
-post_hook(strat, t) = return
 
 
 # ---------------------------------------------------------------------------------
