@@ -21,7 +21,7 @@ using Plots; unicodeplots(show=true)
         inputs = randn(nin, τ)
         targets = w * inputs + repmat(b, 1, τ) + 0.1randn(nout, τ)
 
-        strat = SGD(length(params(obj)), lr=FixedLR(5e-3))
+        strat = GradientDescent(FixedLR(5e-3), SGD())
         @show strat
 
         data = batches(inputs, targets; batch_size = 100)
