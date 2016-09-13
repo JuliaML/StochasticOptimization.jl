@@ -6,7 +6,7 @@ using ObjectiveFunctions
 
 using ValueHistories
 using CatViews
-using Plots; unicodeplots(show=true)
+using Plots; unicodeplots(show=true,leg=false)
 
 # this is an example custom learning strategy
 # which tracks the norm(true_params - estimated_params)
@@ -29,7 +29,7 @@ end
     l = L2DistLoss()
     p = L1Penalty(1e-8)
     obj = RegularizedObjective(t, l, p)
-    @show typeof(params(obj)) typeof(grad(obj))
+    # @show typeof(params(obj)) typeof(grad(obj))
 
     # create some fake data... affine transform plus noise
     τ = 1000
@@ -40,7 +40,7 @@ end
 
     # our learning strategy... SGD with a fixed learning rate
     strat = GradientDescent(FixedLR(5e-3), Adamax())
-    @show strat
+    # @show strat
 
     # # trace setup
     # tr = MVHistory()
@@ -50,16 +50,22 @@ end
 
     # do a bunch of epochs and trace/show in between
     learner = MasterLearner(MaxIter(2000), strat, tracer)
-    @show learner
+    # @show learner
 
     @time learn!(obj, learner, MiniBatches((inputs, targets), 20))
 
-    plot(tracer.normvals)
+    println()
+    plot(tracer.normvals, title = "‖θₜᵣᵤₑ - θ‖²",
+         xguide="Iteration")
 
     # scatter predicted output vs ground truth... should be diagonal line
     est_w, est_b = t.params.views
     pred = est_w * inputs + repmat(est_b, 1, τ)
     truth = w * inputs + repmat(b, 1, τ)
     @test maximum(pred - truth) < 5e-1
-    plot(pred', truth', t=:scatter)
+
+    println()
+    plot(pred', truth', t=:scatter,
+         xguide="Predicted Output",
+         yguide="Actual Output")
 end

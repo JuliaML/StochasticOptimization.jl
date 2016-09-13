@@ -88,7 +88,6 @@ function learn!(model, strat::GradientDescent, subset::AbstractSubset)
     ∇avg = zeros(θ)
     scalar = 1 / length(subset)
     for (input,target) in subset
-        # @show size(input),size(target)
         # forward and backward passes for this datapoint
         transform!(model, target, input)
         grad!(model)
@@ -102,11 +101,4 @@ function learn!(model, strat::GradientDescent, subset::AbstractSubset)
     # update the params using the average gradient
     lr = value(strat.lr)
     update!(θ, strat.updater, ∇avg, lr)
-    # update!(θ, strat, ∇avg)
 end
-
-# # update the parameters given a learning rate value
-# function update!(θ::AbstractVector, strat::GradientDescent, ∇::AbstractVector)
-#     lr = value(strat.lr)
-#     update!(θ, strat.updater, ∇, lr)
-# end
