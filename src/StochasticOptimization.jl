@@ -29,7 +29,8 @@ export
     ParamUpdater,
     SGD,
     Adagrad,
-    Adadelta
+    Adadelta,
+    Adam
 
 include("datasubsets.jl")
 
