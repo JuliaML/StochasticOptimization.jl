@@ -41,7 +41,7 @@ end
     targets = w * inputs + repmat(b, 1, τ) + 0.1randn(nout, τ)
 
     # our learning strategy... SGD with a fixed learning rate
-    strat = GradientDescent(FixedLR(5e-3), SGD())
+    strat = GradientDescent(FixedLR(5e-3), Adadelta(0.5))
     @show strat
 
     # # trace setup
@@ -51,10 +51,10 @@ end
     tracer = NormTracer(CatView(w,b))
 
     # do a bunch of epochs and trace/show in between
-    learner = MasterLearner(MaxIter(500), strat, tracer)
+    learner = MasterLearner(MaxIter(1000), strat, tracer)
     @show learner
 
-    learn!(obj, learner, MiniBatches((inputs, targets)))
+    learn!(obj, learner, MiniBatches((inputs, targets), 20))
 
     plot(tracer.normvals)
 

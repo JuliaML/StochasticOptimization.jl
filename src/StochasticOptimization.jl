@@ -27,7 +27,9 @@ export
     # AdaptiveLR,
 
     ParamUpdater,
-    SGD
+    SGD,
+    Adagrad,
+    Adadelta
 
 include("datasubsets.jl")
 
