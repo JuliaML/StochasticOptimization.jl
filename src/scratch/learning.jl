@@ -9,11 +9,11 @@ strategy = SGD(model) # the spec and state of a learning algorithm
 # loop through batches checking for early stopping after each batch
 function learn!(model, strategy, data::BatchIterator)
     pre_hook(model, strategy)
-    for batch in data
+    for (i, batch) in enumerate(data)
         # update the params for this batch
         learn!(model, strategy, batch)
 
-        iter_hook(model, strategy)
+        iter_hook(model, strategy, i)
         finished(model, strategy) && break
     end
     post_hook(model, strategy)

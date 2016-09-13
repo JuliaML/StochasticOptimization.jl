@@ -1,7 +1,7 @@
 
 # fallbacks don't do anything
 pre_hook(strat::LearningStrategy, model)      = return
-iter_hook(strat::LearningStrategy, model)     = return
+iter_hook(strat::LearningStrategy, model, i::Int)     = return
 post_hook(strat::LearningStrategy, model)     = return
 finished(strat::LearningStrategy, model)      = false
 learn!(model, strat::LearningStrategy, data)  = return
@@ -19,7 +19,7 @@ function MasterLearner(mgrs::LearningStrategy...)
 end
 
 pre_hook(master::MasterLearner,  model) = foreach(mgr -> pre_hook(mgr, model),  master.managers)
-iter_hook(master::MasterLearner, model) = foreach(mgr -> iter_hook(mgr, model), master.managers)
+iter_hook(master::MasterLearner, model, i::Int) = foreach(mgr -> iter_hook(mgr, model, i), master.managers)
 post_hook(master::MasterLearner, model) = foreach(mgr -> post_hook(mgr, model), master.managers)
 finished(master::MasterLearner,  model) = any(mgr     -> finished(mgr, model),  master.managers)
 
@@ -53,7 +53,7 @@ end
 end
 MaxIter(maxiter::Int) = MaxIter(1,maxiter)
 
-iter_hook(strat::MaxIter, model) = (strat.niter += 1)
+iter_hook(strat::MaxIter, model, i::Int) = (strat.niter += 1)
 finished(strat::MaxIter, model) = strat.niter > strat.maxiter
 
 # ---------------------------------------------------------------------------------
@@ -61,11 +61,11 @@ finished(strat::MaxIter, model) = strat.niter > strat.maxiter
 # loop through batches checking for early stopping after each subset
 function learn!(model, strat::LearningStrategy, subsets::AbstractSubsets)
     pre_hook(strat, model)
-    for subset in subsets
+    for (i, subset) in enumerate(subsets)
         # update the params for this subset
         learn!(model, strat, subset)
 
-        iter_hook(strat, model)
+        iter_hook(strat, model, i)
         finished(strat, model) && break
     end
     post_hook(strat, model)

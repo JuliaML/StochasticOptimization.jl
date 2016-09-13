@@ -30,7 +30,8 @@ export
     SGD,
     Adagrad,
     Adadelta,
-    Adam
+    Adam,
+    Adamax
 
 include("datasubsets.jl")
 
