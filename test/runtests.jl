@@ -25,11 +25,10 @@ end
     nin, nout = 10, 1
 
     # build our objective
-    t = Affine{Float64}(nin,nout)
+    t = Affine(nin,nout)
     l = L2DistLoss()
     p = L1Penalty(1e-8)
     obj = RegularizedObjective(t, l, p)
-    # @show typeof(params(obj)) typeof(grad(obj))
 
     # create some fake data... affine transform plus noise
     τ = 1000
@@ -40,19 +39,33 @@ end
 
     # our learning strategy... SGD with a fixed learning rate
     strat = GradientDescent(FixedLR(5e-3), Adamax())
-    # @show strat
 
-    # # trace setup
-    # tr = MVHistory()
-    # normw = normb = 0.0
+    # add norms to a trace vector
+    θ = CatView(w,b)
+    tracer = NormTracer(θ)
 
-    tracer = NormTracer(CatView(w,b))
+    # check for convergence to the true parameter vector
+    θ_converge = ConvergenceFunction((model,i) -> begin
+        if mod1(i,100) == 100
+            normw = norm(θ - params(model))
+            @show i,normw
+            if normw < 0.1
+                info("Converged after $i iterations: $normw")
+                return true
+            end
+        end
+        false
+    end)
 
-    # do a bunch of epochs and trace/show in between
-    learner = MasterLearner(MaxIter(2000), strat, tracer)
-    # @show learner
+    # the MasterLearner have a bunch of specialized sub-learners
+    learner = MasterLearner(
+        MaxIter(5000),
+        strat,
+        tracer,
+        θ_converge
+    )
 
-    @time learn!(obj, learner, MiniBatches((inputs, targets), 20))
+    learn!(obj, learner, MiniBatches((inputs, targets), 20))
 
     println()
     plot(tracer.normvals, title = "‖θₜᵣᵤₑ - θ‖²",

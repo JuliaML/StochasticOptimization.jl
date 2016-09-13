@@ -5,16 +5,15 @@ module StochasticOptimization
 using Reexport
 @reexport using LearnBase
 @reexport using ObjectiveFunctions
-# @reexport using MLDataUtils
 using Parameters
 
 import LearnBase: value, learn!, update!
-# import OnlineStats: Diff, Mean, Variance, fit!, ExponentialWeight
 
 export
     LearningStrategy,
     MasterLearner,
     MaxIter,
+    ConvergenceFunction,
     GradientDescent,
 
     pre_hook,

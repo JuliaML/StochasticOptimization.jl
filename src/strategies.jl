@@ -1,9 +1,24 @@
 
+# This is the core iteration loop.  Loop through batches checking for early stopping after each subset
+function learn!(model, strat::LearningStrategy, subsets::AbstractSubsets)
+    pre_hook(strat, model)
+    for (i, subset) in enumerate(subsets)
+        # update the params for this subset
+        learn!(model, strat, subset)
+
+        iter_hook(strat, model, i)
+        finished(strat, model, i) && break
+    end
+    post_hook(strat, model)
+end
+
+# ---------------------------------------------------------------------------------
+
 # fallbacks don't do anything
 pre_hook(strat::LearningStrategy, model)      = return
 iter_hook(strat::LearningStrategy, model, i::Int)     = return
 post_hook(strat::LearningStrategy, model)     = return
-finished(strat::LearningStrategy, model)      = false
+finished(strat::LearningStrategy, model, i::Int)      = false
 learn!(model, strat::LearningStrategy, data)  = return
 
 # ---------------------------------------------------------------------------------
@@ -18,10 +33,10 @@ function MasterLearner(mgrs::LearningStrategy...)
     MasterLearner(mgrs)
 end
 
-pre_hook(master::MasterLearner,  model) = foreach(mgr -> pre_hook(mgr, model),  master.managers)
-iter_hook(master::MasterLearner, model, i::Int) = foreach(mgr -> iter_hook(mgr, model, i), master.managers)
-post_hook(master::MasterLearner, model) = foreach(mgr -> post_hook(mgr, model), master.managers)
-finished(master::MasterLearner,  model) = any(mgr     -> finished(mgr, model),  master.managers)
+pre_hook(master::MasterLearner,  model)         = foreach(mgr -> pre_hook(mgr, model),      master.managers)
+iter_hook(master::MasterLearner, model, i::Int) = foreach(mgr -> iter_hook(mgr, model, i),  master.managers)
+finished(master::MasterLearner,  model, i::Int) = any(mgr     -> finished(mgr, model, i),   master.managers)
+post_hook(master::MasterLearner, model)         = foreach(mgr -> post_hook(mgr, model),     master.managers)
 
 function learn!(model, master::MasterLearner, data::AbstractSubset)
     for mgr in master.managers
@@ -47,32 +62,26 @@ end
 
 # ---------------------------------------------------------------------------------
 
-@with_kw type MaxIter <: LearningStrategy
-    niter::Int = 1
-    maxiter::Int = 100
+"A sub-strategy to stop the learning after a fixed number of iterations (maxiter)"
+immutable MaxIter <: LearningStrategy
+    maxiter::Int
 end
-MaxIter(maxiter::Int) = MaxIter(1,maxiter)
-
-iter_hook(strat::MaxIter, model, i::Int) = (strat.niter += 1)
-finished(strat::MaxIter, model) = strat.niter > strat.maxiter
+MaxIter() = MaxIter(100)
+finished(strat::MaxIter, model, i::Int) = i >= strat.maxiter
 
 # ---------------------------------------------------------------------------------
 
-# loop through batches checking for early stopping after each subset
-function learn!(model, strat::LearningStrategy, subsets::AbstractSubsets)
-    pre_hook(strat, model)
-    for (i, subset) in enumerate(subsets)
-        # update the params for this subset
-        learn!(model, strat, subset)
-
-        iter_hook(strat, model, i)
-        finished(strat, model) && break
-    end
-    post_hook(strat, model)
+"A sub-strategy to stop learning when the associated function returns true."
+immutable ConvergenceFunction{F<:Function} <: LearningStrategy
+    f::F
 end
+finished(strat::ConvergenceFunction, model, i::Int) = strat.f(model, i)
 
 # ---------------------------------------------------------------------------------
 
+"""
+A Stochastic Gradient Descent learner, with LearningRate lr and ParamUpdater updater (SGD, Adam, etc)
+"""
 immutable GradientDescent{LR <: LearningRate, PU <: ParamUpdater} <: LearningStrategy
     lr::LR
     updater::PU

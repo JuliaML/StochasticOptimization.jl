@@ -14,7 +14,7 @@ function learn!(model, strategy, data::BatchIterator)
         learn!(model, strategy, batch)
 
         iter_hook(model, strategy, i)
-        finished(model, strategy) && break
+        finished(model, strategy, i) && break
     end
     post_hook(model, strategy)
 end
