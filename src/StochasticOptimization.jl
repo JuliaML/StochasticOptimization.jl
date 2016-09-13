@@ -5,7 +5,7 @@ module StochasticOptimization
 using Reexport
 @reexport using LearnBase
 @reexport using ObjectiveFunctions
-@reexport using MLDataUtils
+# @reexport using MLDataUtils
 using Parameters
 
 import LearnBase: value, learn!, update!
@@ -28,6 +28,8 @@ export
 
     ParamUpdater,
     SGD
+
+include("datasubsets.jl")
 
 "Enacts a strategy to adjust the learning rate"
 abstract LearningRate

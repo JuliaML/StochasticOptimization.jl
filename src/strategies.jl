@@ -23,7 +23,7 @@ iter_hook(master::MasterLearner, model) = foreach(mgr -> iter_hook(mgr, model), 
 post_hook(master::MasterLearner, model) = foreach(mgr -> post_hook(mgr, model), master.managers)
 finished(master::MasterLearner,  model) = any(mgr     -> finished(mgr, model),  master.managers)
 
-function learn!(model, master::MasterLearner, data)
+function learn!(model, master::MasterLearner, data::AbstractSubset)
     for mgr in master.managers
         learn!(model, mgr, data)
     end
@@ -51,18 +51,19 @@ end
     niter::Int = 1
     maxiter::Int = 100
 end
+MaxIter(maxiter::Int) = MaxIter(1,maxiter)
 
 iter_hook(strat::MaxIter, model) = (strat.niter += 1)
 finished(strat::MaxIter, model) = strat.niter > strat.maxiter
 
 # ---------------------------------------------------------------------------------
 
-# loop through batches checking for early stopping after each batch
-function learn!(model, strat::LearningStrategy, data::BatchIterator)
+# loop through batches checking for early stopping after each subset
+function learn!(model, strat::LearningStrategy, subsets::AbstractSubsets)
     pre_hook(strat, model)
-    for batch in data
-        # update the params for this batch
-        learn!(model, strat, batch)
+    for subset in subsets
+        # update the params for this subset
+        learn!(model, strat, subset)
 
         iter_hook(strat, model)
         finished(strat, model) && break
@@ -81,12 +82,13 @@ GradientDescent(updater::ParamUpdater, lr::LearningRate = FixedLR(1e-3)) = Gradi
 
 pre_hook(strat::GradientDescent, model) = init(strat.updater, model)
 
-function learn!(model, strat::GradientDescent, batch::Batch)
+function learn!(model, strat::GradientDescent, subset::AbstractSubset)
     θ = params(model)
     ∇ = grad(model)
     ∇avg = zeros(θ)
-    scalar = 1 / length(batch)
-    for (input,target) in batch
+    scalar = 1 / length(subset)
+    for (input,target) in subset
+        # @show size(input),size(target)
         # forward and backward passes for this datapoint
         transform!(model, target, input)
         grad!(model)
@@ -98,11 +100,13 @@ function learn!(model, strat::GradientDescent, batch::Batch)
     end
 
     # update the params using the average gradient
-    update!(θ, strat, ∇avg)
+    lr = value(strat.lr)
+    update!(θ, strat.updater, ∇avg, lr)
+    # update!(θ, strat, ∇avg)
 end
 
-# update the parameters given a learning rate value
-function update!(θ::AbstractVector, strat::GradientDescent, ∇::AbstractVector)
-    lr = value(strat.lr)
-    update!(θ, strat.updater, ∇, lr)
-end
+# # update the parameters given a learning rate value
+# function update!(θ::AbstractVector, strat::GradientDescent, ∇::AbstractVector)
+#     lr = value(strat.lr)
+#     update!(θ, strat.updater, ∇, lr)
+# end
