@@ -28,12 +28,13 @@ end
     t = Affine(nin,nout)
     l = L2DistLoss()
     p = L1Penalty(1e-8)
-    obj = RegularizedObjective(t, l, p)
+    obj = objective(t, l, p)
 
     # create some fake data... affine transform plus noise
+    # note: θ is the "true params"
     τ = 1000
-    w = randn(nout, nin)
-    b = randn(nout)
+    θ = randn(nout*(nin+1))
+    w, b = splitview(θ, ((nout,nin),(nout,)))[1]
     inputs = randn(nin, τ)
     targets = w * inputs + repmat(b, 1, τ) + 0.1randn(nout, τ)
 
@@ -41,7 +42,6 @@ end
     strat = GradientDescent(FixedLR(5e-3), Adamax())
 
     # add norms to a trace vector
-    θ = CatView(w,b)
     tracer = NormTracer(θ)
 
     # check for convergence to the true parameter vector
