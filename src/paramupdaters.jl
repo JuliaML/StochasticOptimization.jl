@@ -1,5 +1,6 @@
 
 # TODO: add citations/links for each method
+# note: good ref: https://www.quora.com/What-are-differences-between-update-rules-like-AdaDelta-RMSProp-AdaGrad-and-AdaM
 
 "Stochastic Gradient Descent with Momentum"
 type SGD{T<:Number} <: ParamUpdater
@@ -64,8 +65,9 @@ Adadelta{T}(::Type{T}, ϵ = T(0.01), ρ = T(0.97)) = Adadelta{T}(T(ϵ), T(ρ))
 Adadelta{T}(ϵ::T = 0.01, ρ::T = 0.97) = Adadelta{T}(ϵ, ρ)
 
 function init(updater::Adadelta, model)
-    updater.dmean = zeros(params(model))
-    updater.Gmean = zeros(params(model))
+    θ = params(model)
+    updater.dmean = zeros(θ)
+    updater.Gmean = zeros(θ)
     return
 end
 
@@ -111,11 +113,11 @@ Adam{T}(::Type{T}, ϵ = T(1e-8), ρ₁ = T(0.9), ρ₂ = T(0.999)) = Adam{T}(T(�
 Adam{T}(ϵ::T = 1e-8, ρ₁::T = 0.9, ρ₂::T = 0.999) = Adam{T}(ϵ, ρ₁, ρ₂)
 
 function init(updater::Adam, model)
-    n = params(model)
-    updater.m = zeros(n)
-    updater.v = zeros(n)
-    updater.ρ₁ᵗ = ones(n)
-    updater.ρ₂ᵗ = ones(n)
+    θ = params(model)
+    updater.m = zeros(θ)
+    updater.v = zeros(θ)
+    updater.ρ₁ᵗ = ones(θ)
+    updater.ρ₂ᵗ = ones(θ)
     return
 end
 
@@ -155,10 +157,10 @@ Adamax{T}(::Type{T}, ρ₁ = T(0.9), ρ₂ = T(0.999)) = Adamax{T}(T(ρ₁), T(�
 Adamax{T}(ρ₁::T = 0.9, ρ₂::T = 0.999) = Adamax{T}(ρ₁, ρ₂)
 
 function init(updater::Adamax, model)
-    n = params(model)
-    updater.m = zeros(n)
-    updater.u = zeros(n)
-    updater.ρ₁ᵗ = ones(n)
+    θ = params(model)
+    updater.m = zeros(θ)
+    updater.u = zeros(θ)
+    updater.ρ₁ᵗ = ones(θ)
     return
 end
 
@@ -177,3 +179,27 @@ function update!{T}(θ::AbstractVector, updater::Adamax{T}, ∇::AbstractVector,
 end
 
 # -----------------------------------------------------------------------
+
+# TODO: RMSProp: http://climin.readthedocs.io/en/latest/rmsprop.html#tieleman2012rmsprop
+
+type RMSProp{T<:Number} <: ParamUpdater
+    γ::T # exponential weight of ∇² avg
+    g::Vector{T}  # the exponential mean
+    RMSProp(γ::T) = new(γ)
+end
+RMSProp{T}(::Type{T}, γ = T(0.95)) = RMSProp{T}(T(γ))
+RMSProp() = RMSProp{Float64}(0.95)
+
+function init(updater::RMSProp, model)
+    updater.g = zeros(params(model))
+    return
+end
+
+function update!{T}(θ::AbstractVector, updater::RMSProp{T}, ∇::AbstractVector, lr::Number)
+    γ = updater.γ
+    g = updater.g
+    for i=1:length(θ)
+        g[i] = γ * g[i] + (one(T) - γ) * ∇[i]^2
+        θ[i] -= lr * ∇[i] / sqrt(g[i] + 1e-10)
+    end
+end

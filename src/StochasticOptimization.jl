@@ -30,7 +30,8 @@ export
     Adagrad,
     Adadelta,
     Adam,
-    Adamax
+    Adamax,
+    RMSProp
 
 include("datasubsets.jl")
 
