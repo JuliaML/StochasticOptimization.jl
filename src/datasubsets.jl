@@ -66,3 +66,11 @@ MiniBatches(source) = MiniBatches(source, default_batch_size(source))
 Base.start(mb::MiniBatches) = nothing
 Base.done(mb::MiniBatches, i) = false
 Base.next(mb::MiniBatches, i) = (DataSubset(mb.source, rand(1:nobs(mb.source), mb.batch_size)), nothing)
+
+
+# ----------------------------------------------------------------------------
+
+# convenience to iterate through source data
+function eachobs(source)
+    DataSubset(source, 1:nobs(source))
+end

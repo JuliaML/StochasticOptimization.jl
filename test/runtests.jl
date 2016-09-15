@@ -58,11 +58,11 @@ end
     end)
 
     # the MasterLearner have a bunch of specialized sub-learners
-    learner = MasterLearner(
-        MaxIter(5000),
+    learner = make_learner(
         strat,
         tracer,
-        θ_converge
+        θ_converge,
+        maxiter=5000
     )
 
     learn!(obj, learner, MiniBatches((inputs, targets), 20))

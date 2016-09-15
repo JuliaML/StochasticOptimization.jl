@@ -14,7 +14,11 @@ export
     MasterLearner,
     MaxIter,
     ConvergenceFunction,
+    IterFunction,
     GradientDescent,
+    make_learner,
+
+    eachobs,
 
     pre_hook,
     iter_hook,

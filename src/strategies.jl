@@ -79,6 +79,31 @@ finished(strat::ConvergenceFunction, model, i::Int) = strat.f(model, i)
 
 # ---------------------------------------------------------------------------------
 
+
+"A sub-strategy to do something each iteration."
+immutable IterFunction{F<:Function} <: LearningStrategy
+    f::F
+end
+iter_hook(strat::IterFunction, model, i::Int) = strat.f(model, i)
+
+# ---------------------------------------------------------------------------------
+
+function make_learner(args...; kw...)
+    strats = []
+    for (k,v) in kw
+        if k == :maxiter
+            push!(strats, MaxIter(v))
+        elseif k == :oniter
+            push!(strats, IterFunction(v))
+        elseif k == :converged
+            push!(strats, ConvergenceFunction(v))
+        end
+    end
+    MasterLearner(args..., strats...)
+end
+
+# ---------------------------------------------------------------------------------
+
 """
 A Stochastic Gradient Descent learner, with LearningRate lr and ParamUpdater updater (SGD, Adam, etc)
 """
