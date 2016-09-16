@@ -103,6 +103,11 @@ function make_learner(args...; kw...)
     MasterLearner(args..., strats...)
 end
 
+# add to an existing master
+function make_learner(master::MasterLearner, args...; kw...)
+    make_learner(master.managers..., args...; kw...)
+end
+
 # ---------------------------------------------------------------------------------
 
 """
@@ -114,6 +119,7 @@ immutable GradientDescent{LR <: LearningRate, PU <: ParamUpdater} <: LearningStr
 end
 GradientDescent(lr::LearningRate = FixedLR(1e-3), updater::ParamUpdater = SGD()) = GradientDescent(lr, updater)
 GradientDescent(updater::ParamUpdater, lr::LearningRate = FixedLR(1e-3)) = GradientDescent(lr, updater)
+GradientDescent(lr::Number, updater::ParamUpdater = SGD()) = GradientDescent(FixedLR(lr), updater)
 
 pre_hook(strat::GradientDescent, model) = init(strat.updater, model)
 

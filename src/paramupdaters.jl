@@ -32,8 +32,8 @@ type Adagrad{T<:Number} <: ParamUpdater
     G::Vector{T}  # sum of squared gradients
     Adagrad(ϵ::T) = new(ϵ)
 end
-Adagrad{T}(::Type{T}, ϵ = T(0.01)) = Adagrad{T}(T(ϵ))
-Adagrad{T}(ϵ::T = 0.01) = Adagrad{T}(ϵ)
+Adagrad{T}(::Type{T}, ϵ = 1e-2) = Adagrad{T}(T(ϵ))
+Adagrad() = Adagrad(Float64)
 
 function init(updater::Adagrad, model)
     updater.G = zeros(params(model))
@@ -61,8 +61,8 @@ type Adadelta{T<:Number} <: ParamUpdater
     Gmean::Vector{T} # exponential average of squared gradients
     Adadelta(ϵ::T, ρ::T) = new(ϵ, ρ)
 end
-Adadelta{T}(::Type{T}, ϵ = T(0.01), ρ = T(0.97)) = Adadelta{T}(T(ϵ), T(ρ))
-Adadelta{T}(ϵ::T = 0.01, ρ::T = 0.97) = Adadelta{T}(ϵ, ρ)
+Adadelta{T}(::Type{T}, ϵ = 1e-2, ρ = 0.97) = Adadelta{T}(T(ϵ), T(ρ))
+Adadelta{T}(ϵ::T = 1e-2, ρ::T = 0.97) = Adadelta{T}(ϵ, ρ)
 
 function init(updater::Adadelta, model)
     θ = params(model)

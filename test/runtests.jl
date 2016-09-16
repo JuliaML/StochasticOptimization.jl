@@ -2,11 +2,84 @@ using StochasticOptimization
 using Base.Test
 
 using ObjectiveFunctions
+using Transformations.TestTransforms
 # using MLDataUtils
+
+using Plots; unicodeplots(show=true,leg=false)
+
+@testset "Rosenbrock-2" begin
+
+    n = 2
+    t = rosenbrock_transform(n)
+    obj = objective(t, L2DistLoss())
+
+    # random starting values
+    θ = params(t)
+    startvals = 8rand(n)-4
+
+    # build a MasterLearner to use RMSProp w/ fixed learning rate,
+    # setting max iterations, a custom convergence check, and a
+    # custom iteration callback to collect data to plot
+    converged = (m,i) -> output_value(m)[1] < 1e-8
+    maxiter = 50000
+
+    # this problem has no input (we're learning the params only),
+    # and we know the minimum is zero, so we forever pull from this
+    # fixed (inputs,targets) pair
+    data = zeros(0,1),zeros(1,1)
+
+    # test the choices of ParamUpdaters
+    for (T, lr) in [
+                    (SGD, 1e-4),
+                    (Adagrad, 1e-1),
+                    (Adadelta, 1e-3),
+                    (Adam, 1e-2),
+                    (Adamax, 1e-3),
+                    (RMSProp, 1e-3),
+                    ]
+        @show T,lr
+        learner = make_learner(
+            GradientDescent(lr, T()),
+            maxiter = maxiter,
+            converged = converged
+        )
+
+        # learn forever (our maxiter and converge sub-learners will stop us)
+        θ[:] = startvals
+        learn!(obj, learner, forever(eachobs(data)))
+
+        @show totalcost(obj)
+        @test totalcost(obj) < 1e-4
+    end
+
+    # rerun while tracking x/y
+    x,y = zeros(0),zeros(0)
+    learner = make_learner(
+        GradientDescent(FixedLR(1e-3), RMSProp()),
+        maxiter = 50000,
+        converged = converged,
+        oniter = (m,i) -> begin
+            θ = params(m)
+            push!(x, θ[1])
+            push!(y, θ[2])
+            if mod1(i,2000)==1
+                println("Iter: $i Loss: $(output_value(m)[1]) θ: $θ")
+            end
+        end
+    )
+
+    # learn forever (our maxiter and converge sub-learners will stop us)
+    θ[:] = startvals
+    learn!(obj, learner, forever(eachobs(data)))
+    @show totalcost(obj)
+    @test totalcost(obj) < 1e-5
+
+    # plot our path to solution
+    plot(x,y)
+end
 
 using ValueHistories
 using CatViews
-using Plots; unicodeplots(show=true,leg=false)
 
 # this is an example custom learning strategy
 # which tracks the norm(true_params - estimated_params)
