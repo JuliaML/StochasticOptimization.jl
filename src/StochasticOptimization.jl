@@ -18,6 +18,7 @@ export
     GradientDescent,
     make_learner,
 
+    forever,
     eachobs,
 
     pre_hook,

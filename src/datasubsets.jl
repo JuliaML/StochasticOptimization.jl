@@ -67,6 +67,17 @@ Base.start(mb::MiniBatches) = nothing
 Base.done(mb::MiniBatches, i) = false
 Base.next(mb::MiniBatches, i) = (DataSubset(mb.source, rand(1:nobs(mb.source), mb.batch_size)), nothing)
 
+# ----------------------------------------------------------------------------
+
+"just keep giving object `o` at each iteration"
+type InfiniteGenerator{T} <: AbstractSubsets
+    o::T
+end
+Base.start(ep::InfiniteGenerator) = nothing
+Base.done(ep::InfiniteGenerator, i) = false
+Base.next(ep::InfiniteGenerator, i) = ep.o, nothing
+
+forever(o) = InfiniteGenerator(o)
 
 # ----------------------------------------------------------------------------
 

@@ -1,16 +1,4 @@
 
-# This is the core iteration loop.  Loop through batches checking for early stopping after each subset
-function learn!(model, strat::LearningStrategy, subsets::AbstractSubsets)
-    pre_hook(strat, model)
-    for (i, subset) in enumerate(subsets)
-        # update the params for this subset
-        learn!(model, strat, subset)
-
-        iter_hook(strat, model, i)
-        finished(strat, model, i) && break
-    end
-    post_hook(strat, model)
-end
 
 # ---------------------------------------------------------------------------------
 
@@ -38,10 +26,23 @@ iter_hook(master::MasterLearner, model, i::Int) = foreach(mgr -> iter_hook(mgr, 
 finished(master::MasterLearner,  model, i::Int) = any(mgr     -> finished(mgr, model, i),   master.managers)
 post_hook(master::MasterLearner, model)         = foreach(mgr -> post_hook(mgr, model),     master.managers)
 
-function learn!(model, master::MasterLearner, data::AbstractSubset)
+function learn!(model, master::MasterLearner, data)
     for mgr in master.managers
         learn!(model, mgr, data)
     end
+end
+
+# This is the core iteration loop.  Loop through batches checking for early stopping after each subset
+function learn!(model, strat::MasterLearner, subsets::AbstractSubsets)
+    pre_hook(strat, model)
+    for (i, subset) in enumerate(subsets)
+        # update the params for this subset
+        learn!(model, strat, subset)
+
+        iter_hook(strat, model, i)
+        finished(strat, model, i) && break
+    end
+    post_hook(strat, model)
 end
 
 # TODO: can we instead use generated functions for each MasterLearner callback so that they are ONLY called for
