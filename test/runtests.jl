@@ -5,10 +5,74 @@ using ObjectiveFunctions
 using Transformations.TestTransforms
 # using MLDataUtils
 
+@testset "Data Iteration" begin
+    n = 4
+    X = rand(2,n)
+    y = rand(n)
+
+    # nobs/getobs of arrays
+    @test nobs(X) == n
+    @test nobs(y) == n
+    @test getobs(X, 1) == X[:,1]
+    @test getobs(y, 1) == y[1]
+    @test getobs(X, 1:2) == X[:, 1:2]
+    @test getobs(y, 1:2) == y[1:2]
+
+    # construction
+    subset = eachobs(X, y)
+    @test typeof(subset) <: DataSubset{Tuple{Matrix{Float64},Vector{Float64}}}
+    @test length(subset) == n
+    @test subset.indices == 1:n
+    @test subset.source == (X,y)
+    @test nobs(subset) == n
+
+    # iterating... sort of
+    o1, o2, o3, o4 = subset
+    @test o2 == (X[:,2], y[2])
+
+    # extraction
+    subset2 = DataSubset((X, y), 1:1)
+    cx, cy = collect(subset2)
+    @test typeof(cx) <: Matrix
+    @test cx == X[:,1:1]
+    @test typeof(cy) <: Vector
+    @test cy == y[1:1]
+
+    # random obs
+    (x1,x2),yi = rand(subset)
+    @test x1 in X
+    @test x2 in X
+    @test yi in y
+
+    # random arrays
+    xs,ys = rand(subset, 2)
+    @test size(xs) == (2,2)
+    @test size(ys) == (2,)
+
+    # getindex
+    for i=1:n
+        @test subset[i] == (X[:,i], y[i])
+    end
+
+    # iteration
+    for (i,(x,yi)) in enumerate(subset)
+        @test x == X[:,i]
+        @test yi == y[i]
+    end
+
+    # shuffling
+    ss = shuffled(X,y)
+    @test length(ss.indices) == n
+end
+
+# Stop the tests
+error()
+
 using Plots; unicodeplots(show=true,leg=false)
 
 @testset "Rosenbrock-2" begin
 
+    srand(1)
     n = 2
     t = rosenbrock_transform(n)
     obj = objective(t, L2DistLoss())
@@ -16,6 +80,7 @@ using Plots; unicodeplots(show=true,leg=false)
     # random starting values
     θ = params(t)
     startvals = 8rand(n)-4
+    @show startvals
 
     # build a MasterLearner to use RMSProp w/ fixed learning rate,
     # setting max iterations, a custom convergence check, and a
@@ -31,7 +96,7 @@ using Plots; unicodeplots(show=true,leg=false)
     # test the choices of ParamUpdaters
     for (T, lr) in [
                     (SGD, 1e-4),
-                    (Adagrad, 1e-1),
+                    (Adagrad, 1e-0),
                     (Adadelta, 1e-3),
                     (Adam, 1e-2),
                     (Adamax, 1e-3),
@@ -75,7 +140,7 @@ using Plots; unicodeplots(show=true,leg=false)
     @test totalcost(obj) < 1e-5
 
     # plot our path to solution
-    plot(x,y)
+    plot(x,y, ann=[(θ..., text("$θ", :left))])
 end
 
 using ValueHistories
