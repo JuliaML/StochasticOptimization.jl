@@ -13,6 +13,7 @@ export
     LearningStrategy,
     MasterLearner,
     MaxIter,
+    TimeLimit,
     ConvergenceFunction,
     IterFunction,
     GradientDescent,

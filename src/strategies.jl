@@ -4,9 +4,9 @@
 
 # fallbacks don't do anything
 pre_hook(strat::LearningStrategy, model)      = return
-iter_hook(strat::LearningStrategy, model, i::Int)     = return
+iter_hook(strat::LearningStrategy, model, i)     = return
 post_hook(strat::LearningStrategy, model)     = return
-finished(strat::LearningStrategy, model, i::Int)      = false
+finished(strat::LearningStrategy, model, i)      = false
 learn!(model, strat::LearningStrategy, data)  = return
 
 # ---------------------------------------------------------------------------------
@@ -21,28 +21,31 @@ function MasterLearner(mgrs::LearningStrategy...)
     MasterLearner(mgrs)
 end
 
-pre_hook(master::MasterLearner,  model)         = foreach(mgr -> pre_hook(mgr, model),      master.managers)
-iter_hook(master::MasterLearner, model, i::Int) = foreach(mgr -> iter_hook(mgr, model, i),  master.managers)
-finished(master::MasterLearner,  model, i::Int) = any(mgr     -> finished(mgr, model, i),   master.managers)
-post_hook(master::MasterLearner, model)         = foreach(mgr -> post_hook(mgr, model),     master.managers)
+pre_hook(master::MasterLearner,  model)    = foreach(mgr -> pre_hook(mgr, model),      master.managers)
+iter_hook(master::MasterLearner, model, i) = foreach(mgr -> iter_hook(mgr, model, i),  master.managers)
+finished(master::MasterLearner,  model, i) = any(mgr     -> finished(mgr, model, i),   master.managers)
+post_hook(master::MasterLearner, model)    = foreach(mgr -> post_hook(mgr, model),     master.managers)
 
-function learn!(model, master::MasterLearner, data)
-    for mgr in master.managers
-        learn!(model, mgr, data)
-    end
-end
+# function learn!(model, master::MasterLearner, data)
+#     for mgr in master.managers
+#         learn!(model, mgr, data)
+#     end
+# end
 
 # This is the core iteration loop.  Loop through batches checking for early stopping after each subset
-function learn!(model, strat::MasterLearner, subsets::AbstractSubsets)
-    pre_hook(strat, model)
-    for (i, subset) in enumerate(subsets)
+function learn!(model, master::MasterLearner, data)
+    pre_hook(master, model)
+    for (i, obs) in enumerate(data)
         # update the params for this subset
-        learn!(model, strat, subset)
+        # learn!(model, master, subset)
+        for mgr in master.managers
+            learn!(model, mgr, data)
+        end
 
-        iter_hook(strat, model, i)
-        finished(strat, model, i) && break
+        iter_hook(master, model, i)
+        finished(master, model, i) && break
     end
-    post_hook(strat, model)
+    post_hook(master, model)
 end
 
 # TODO: can we instead use generated functions for each MasterLearner callback so that they are ONLY called for
@@ -68,7 +71,24 @@ immutable MaxIter <: LearningStrategy
     maxiter::Int
 end
 MaxIter() = MaxIter(100)
-finished(strat::MaxIter, model, i::Int) = i >= strat.maxiter
+finished(strat::MaxIter, model, i) = i >= strat.maxiter
+
+# ---------------------------------------------------------------------------------
+
+"Stop iterating after a pre-determined amount of time."
+type TimeLimit <: LearningStrategy
+    secs::Float64
+    secs_end::Float64
+    TimeLimit(secs::Number) = new(secs)
+end
+pre_hook(strat::TimeLimit, model) = (strat.secs_end = time() + strat.secs)
+function finished(strat::TimeLimit, model, i)
+    stop = time() >= strat.secs_end
+    if stop
+        info("Time's up!")
+    end
+    stop
+end
 
 # ---------------------------------------------------------------------------------
 
@@ -76,7 +96,7 @@ finished(strat::MaxIter, model, i::Int) = i >= strat.maxiter
 immutable ConvergenceFunction{F<:Function} <: LearningStrategy
     f::F
 end
-finished(strat::ConvergenceFunction, model, i::Int) = strat.f(model, i)
+finished(strat::ConvergenceFunction, model, i) = strat.f(model, i)
 
 # ---------------------------------------------------------------------------------
 
@@ -85,7 +105,7 @@ finished(strat::ConvergenceFunction, model, i::Int) = strat.f(model, i)
 immutable IterFunction{F<:Function} <: LearningStrategy
     f::F
 end
-iter_hook(strat::IterFunction, model, i::Int) = strat.f(model, i)
+iter_hook(strat::IterFunction, model, i) = strat.f(model, i)
 
 # ---------------------------------------------------------------------------------
 

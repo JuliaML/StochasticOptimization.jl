@@ -66,7 +66,7 @@ using Transformations.TestTransforms
 end
 
 # Stop the tests
-error()
+# error()
 
 using Plots; unicodeplots(show=true,leg=false)
 
@@ -105,6 +105,7 @@ using Plots; unicodeplots(show=true,leg=false)
         @show T,lr
         learner = make_learner(
             GradientDescent(lr, T()),
+            TimeLimit(1),
             maxiter = maxiter,
             converged = converged
         )

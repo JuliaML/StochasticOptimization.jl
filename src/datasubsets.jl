@@ -76,7 +76,7 @@
 # ----------------------------------------------------------------------------
 # ----------------------------------------------------------------------------
 
-import Iterators: repeatedly
+import Iterators: repeatedly, repeated
 import LearnBase: nobs, getobs
 
 export
@@ -89,7 +89,8 @@ export
     eachobs,
     shuffled,
     splitdata,
-    repeatedly
+    repeatedly,
+    repeated
 
 abstract AbstractSubset
 abstract AbstractSubsets
