@@ -105,17 +105,18 @@ using Plots; unicodeplots(show=true,leg=false)
         @show T,lr
         learner = make_learner(
             GradientDescent(lr, T()),
-            TimeLimit(1),
+            # TimeLimit(10),
             maxiter = maxiter,
             converged = converged
         )
 
         # learn forever (our maxiter and converge sub-learners will stop us)
         θ[:] = startvals
-        learn!(obj, learner, forever(eachobs(data)))
+        learn!(obj, learner, infinite_obs(data))
 
-        @show totalcost(obj)
-        @test totalcost(obj) < 1e-4
+        tc = totalcost(obj)
+        @show tc
+        @test 0 < tc < 1e-4
     end
 
     # rerun while tracking x/y
@@ -136,9 +137,11 @@ using Plots; unicodeplots(show=true,leg=false)
 
     # learn forever (our maxiter and converge sub-learners will stop us)
     θ[:] = startvals
-    learn!(obj, learner, forever(eachobs(data)))
-    @show totalcost(obj)
-    @test totalcost(obj) < 1e-5
+    learn!(obj, learner, infinite_batches(data))
+
+    tc = totalcost(obj)
+    @show tc
+    @test 0 < tc < 1e-4
 
     # plot our path to solution
     plot(x,y, ann=[(θ..., text("$θ", :left))])
@@ -204,7 +207,7 @@ end
         maxiter=5000
     )
 
-    learn!(obj, learner, MiniBatches((inputs, targets), 20))
+    learn!(obj, learner, infinite_batches(inputs, targets, size=20))
 
     println()
     plot(tracer.normvals, title = "‖θₜᵣᵤₑ - θ‖²",

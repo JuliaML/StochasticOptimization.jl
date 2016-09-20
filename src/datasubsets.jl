@@ -84,11 +84,13 @@ export
     AbstractSubsets,
     DataSubset,
     DataSubsets,
-    RandomMiniBatches,
+    # RandomMiniBatches,
 
     eachobs,
     shuffled,
     splitdata,
+    infinite_obs,
+    infinite_batches,
     repeatedly,
     repeated
 
@@ -185,16 +187,16 @@ Base.collect(subsets::DataSubsets) = map(collect, subsets.subsets)
 
 default_batch_size(source) = clamp(div(nobs(source), 5), 1, 100)
 
-"An infinite-length iterator, producing a minibatch for source data (with replacement) at each iteration."
-immutable RandomMiniBatches{S} <: AbstractSubsets
-    source::S
-    batch_size::Int
-end
-RandomMiniBatches(source) = RandomMiniBatches(source, default_batch_size(source))
-
-Base.start(mb::RandomMiniBatches) = nothing
-Base.done(mb::RandomMiniBatches, i) = false
-Base.next(mb::RandomMiniBatches, i) = (DataSubset(mb.source, rand(1:nobs(mb.source), mb.batch_size)), nothing)
+# "An infinite-length iterator, producing a minibatch for source data (with replacement) at each iteration."
+# immutable RandomMiniBatches{S} <: AbstractSubsets
+#     source::S
+#     batch_size::Int
+# end
+# RandomMiniBatches(source) = RandomMiniBatches(source, default_batch_size(source))
+#
+# Base.start(mb::RandomMiniBatches) = nothing
+# Base.done(mb::RandomMiniBatches, i) = false
+# Base.next(mb::RandomMiniBatches, i) = (DataSubset(mb.source, rand(1:nobs(mb.source), mb.batch_size)), nothing)
 
 # ----------------------------------------------------------------------------
 
@@ -212,19 +214,63 @@ Base.next(mb::RandomMiniBatches, i) = (DataSubset(mb.source, rand(1:nobs(mb.sour
 # convenience API
 
 # call with a tuple for more than one arg
-for f in [:eachobs, :shuffled]
+for f in [:eachobs, :shuffled, :infinite_obs]
     @eval $f(s_1, s_2, s_rest...) = $f((s_1, s_2, s_rest...))
 end
 
-# build a DataSubset
+"""
+Iterate over source data.
+
+```julia
+for (x,y) in eachobs(X,Y)
+    ...
+end
+```
+"""
 eachobs(source) = DataSubset(source)
 
-# build a DataSubset with shuffled indices
+"""
+Iterate over shuffled (randomized) source data.  This is non-copy and non-mutating (only the indices are shuffled).
+
+```julia
+for (x,y) in shuffled(X,Y)
+    ...
+end
+```
+"""
 shuffled(source) = DataSubset(source, shuffle(1:nobs(source)))
 
-# construct a DataSubsets
-splitdata(source...; kw...) = splitdata(DataSubset(source...); kw...)
+"""
+Infinitely return a random observation.
 
+```julia
+for (x,y) in infinite_obs(X,Y)
+    ...
+end
+```
+"""
+infinite_obs(source) = repeatedly(() -> rand(DataSubset(source)))
+
+"""
+Split the data apart, either by specifying a size or giving a percentage split point.
+
+```julia
+# split into training and test sets, 60%/40% respectively
+train, test = splitdata(X, Y, size = 0.6)
+
+# split into equal-sized minibatches of 10 observations each
+for batch in splitdata(X, Y, size = 10)
+    ...
+end
+
+# Tips:
+#   - Iterators can be nested
+#   - Observations can be extracted immediately
+for (x,y) in splitdata(shuffled(X, Y), size = 10)
+    ...
+end
+```
+"""
 function splitdata(subset::DataSubset; size = default_batch_size(subset.source))
     n = nobs(subset)
     idx_list = if typeof(size) <: AbstractFloat
@@ -244,3 +290,19 @@ function splitdata(subset::DataSubset; size = default_batch_size(subset.source))
     @show idx_list
     DataSubsets(map(idx -> DataSubset(subset, idx), idx_list))
 end
+splitdata(source...; kw...) = splitdata(DataSubset(source...); kw...)
+
+"""
+Sample a random minibatch (with replacement) repeatedly forever.
+
+```julia
+for batch in infinite_batches(X, Y, size = 10)
+    ...
+end
+```
+"""
+function infinite_batches(subset::DataSubset; size = default_batch_size(subset.source))
+    repeatedly(() -> DataSubset(subset.source, rand(1:nobs(subset.source), size)))
+end
+infinite_batches(source; kw...) = infinite_batches(DataSubset(source); kw...)
+infinite_batches(source...; kw...) = infinite_batches(DataSubset(source); kw...)

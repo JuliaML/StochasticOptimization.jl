@@ -26,12 +26,6 @@ iter_hook(master::MasterLearner, model, i) = foreach(mgr -> iter_hook(mgr, model
 finished(master::MasterLearner,  model, i) = any(mgr     -> finished(mgr, model, i),   master.managers)
 post_hook(master::MasterLearner, model)    = foreach(mgr -> post_hook(mgr, model),     master.managers)
 
-# function learn!(model, master::MasterLearner, data)
-#     for mgr in master.managers
-#         learn!(model, mgr, data)
-#     end
-# end
-
 # This is the core iteration loop.  Loop through batches checking for early stopping after each subset
 function learn!(model, master::MasterLearner, data)
     pre_hook(master, model)
@@ -39,7 +33,7 @@ function learn!(model, master::MasterLearner, data)
         # update the params for this subset
         # learn!(model, master, subset)
         for mgr in master.managers
-            learn!(model, mgr, data)
+            learn!(model, mgr, obs)
         end
 
         iter_hook(master, model, i)
@@ -143,6 +137,7 @@ GradientDescent(lr::Number, updater::ParamUpdater = SGD()) = GradientDescent(Fix
 
 pre_hook(strat::GradientDescent, model) = init(strat.updater, model)
 
+# minibatch learning.  update with average gradient
 function learn!(model, strat::GradientDescent, subset::AbstractSubset)
     θ = params(model)
     ∇ = grad(model)
@@ -162,4 +157,17 @@ function learn!(model, strat::GradientDescent, subset::AbstractSubset)
     # update the params using the average gradient
     lr = value(strat.lr)
     update!(θ, strat.updater, ∇avg, lr)
+end
+
+# stochastic learning.  update with a single gradient
+function learn!(model, strat::GradientDescent, obs::Tuple)
+    input, target = obs
+
+    # forward and backward passes for this datapoint
+    transform!(model, target, input)
+    grad!(model)
+
+    # update the params using the gradient
+    lr = value(strat.lr)
+    update!(params(model), strat.updater, grad(model), lr)
 end
