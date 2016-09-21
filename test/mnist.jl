@@ -2,19 +2,38 @@ module MnistTest
 
 using Learn
 import MNIST
-using StatPlots; glvisualize(leg=false, size=(900,700))
+using StatPlots; gr(leg=false, size=(700,700))
+
+# ----------------------------------------------------------------------------
+# TODO: add this to MLPlots??
+
+# a helper class to track many variables at once over time
+type TracePlot{T}
+    n::Int
+    plt::Plot{T}
+end
+function TracePlot(n::Int = 1; kw...)
+    plt = plot(n; kw...)
+    TracePlot(n,plt)
+end
+function add_data(tp::TracePlot, x::Number, y::AbstractVector)
+    for (i,series) in enumerate(tp.plt.series_list)
+        push!(series, x, y[i])
+    end
+end
+add_data(tp::TracePlot, x::Number, y::Number) = add_data(tp, x, [y])
+
+# ----------------------------------------------------------------------------
 
 function doit()
 
     # our data:
-    train_x, train_y = MNIST.traindata()
-    test_x, test_y = MNIST.testdata()
+    train = MNIST.traindata()
+    test = MNIST.testdata()
 
-    # normalize
-    μ = mean(train_x)
-    σ = std(train_x)
-    train_x = convert(Matrix{Float64}, (train_x) / σ)
-    test_x = convert(Matrix{Float64}, (test_x) / σ)
+    # scale pixels to [0,1]
+    train[1][:] ./= 255
+    test[1][:] ./= 255
 
     # TODO: this MUST be defined somewhere... where?
     # function to_one_hot(y::AbstractVector)
@@ -29,90 +48,77 @@ function doit()
     # end
     # train_y, test_y = map(to_one_hot, (train_y, test_y))
 
-    to_isone(y::AbstractVector) = (z = Array(eltype(y), 1, length(y)); map!(yi->float(yi==1.0), z, y))
-    train_y, test_y = map(to_isone, (train_y, test_y))
+    # to_isone(y::AbstractVector) = (z = Array(eltype(y), 1, length(y)); map!(yi->float(yi==1.0), z, y))
+    # train_y, test_y = map(to_isone, (train_y, test_y))
 
-    @show train_y[:,1]
+    # keep only 0's and 1's
+    train01 = filterobs(i -> train[2][i] < 1.5, train)
+    test01 = filterobs(i -> test[2][i] < 1.5, test)
 
     # At this point we have train and test where each column of x is length-784 corresponding to pixel intensities,
     # and each column of y is length-10 corresponding to output class.
 
-    nin, nout = 784, 1
-    nh = 100
+    nin, nh, nout = 784, 10, 1
 
-    # build our objective
-    t = Chain(Float64,
-        Affine(Float64,nin,nh),
-        Activation{:tanh,Float64}(nh),
-        Affine(Float64,nh,nout),
-        # Activation{:softmax,Float64}(nout)
-        Activation{:logistic,Float64}(nout)
-    )
-    # l = CrossEntropy{Float64}(nout)
-    l = CrossentropyLoss()
-    p = L2Penalty(Float64(1e-6))
-    obj = objective(t, l, p)
+    # build our objective... a neural net with nh hidden nodes,
+    # tanh activation on the hidden layer, and logistic output
+    t = nnet(nin, nout, [nh], :tanh, :logistic)
+    obj = objective(t, L1Penalty(1e-4))
 
-    # ps = Float64[]
-    # xs = Float64[]
-    # zs = Float64[]
+
+    # store 200 random weights
+    θ = params(t)
+    np = length(θ)
     ni = 200
-    np = length(params(t))
     indices = rand(1:np, ni)
-    plt1 = plot(ni)
-    # plt2 = plot(length(params(t.ts[3])))
-    totl = Float64[]
-    Σ₁ = Float64[]
-    Σ₁ₜ = Float64[]
-    Σ₂ = Float64[]
-    Σ₂ₜ = Float64[]
+    wplt = TracePlot(ni, title="Param Weights")
 
-    early_stopping = ConvergenceFunction((model,i) -> begin
+    lossplt = TracePlot(title="Test Loss")
+    outplts = [
+        TracePlot(output_length(t[1]), l=0.2, m=(3,0.3,stroke(0)), title="First Affine Outputs"),
+        TracePlot(output_length(t[3]), l=0.2, m=(5,0.5,stroke(0)), title="Second Affine Outputs"),
+    ]
+
+    # early_stopping = ConvergenceFunction((model,i) -> begin
+    #     false
+    # end)
+
+    tracer = IterFunction((model, i) -> begin
         n = 50
         mod1(i,n)==n || return false
-        @show i
-        # append!(ps, params(model)[indices])
-        # append!(xs, i*ones(ni))
-        # append!(zs, 1:ni)
-        θ = params(model)
-        for i=1:ni
-            push!(plt1[1][i], θ[indices[i]])
-        end
-        append!(Σ₁, output_value(t.ts[1]))
-        append!(Σ₁ₜ, i*ones(length(output_value(t.ts[1]))))
-        append!(Σ₂, output_value(t.ts[3]))
-        append!(Σ₂ₜ, i*ones(length(output_value(t.ts[3]))))
+
+
+        # sample 50 points from the test set and compute/save the loss
         totloss = 0.0
-        for (x,y) in DataSubset((test_x,test_y),rand(1:size(test_x,2), 50))
+        for (x,y) in eachobs(rand(eachobs(test01), 50))
             totloss += transform!(model,y,x)
         end
-        push!(totl, totloss)
+        @show i,totloss
+
+        # add to the trace plots
+        add_data(wplt, i, θ[indices])
+        add_data(outplts[1], i, output_value(t[1]))
+        add_data(outplts[2], i, output_value(t[3]))
+        add_data(lossplt, i, totloss)
+
         plot(
-            # histogram2d(xs,ps,bins=(div(i,n),40)),
-            plt1,
-            # plt2,
-            # scatter(xs,ps, m=(:black,3,0.2,stroke(0)), marker_z = zs),
-            plot(totl),
-            scatter(Σ₁ₜ, Σ₁, m=(:black,3,0.3,stroke(0))),
-            scatter(Σ₂ₜ, Σ₂, m=(:black,5,0.5,stroke(0))),
-            layout=@layout([a;b{0.2h}; c d])
+            wplt.plt,
+            lossplt.plt,
+            outplts[1].plt,
+            outplts[2].plt,
+            layout=@layout([a;b{0.2h};c d])
         ); gui()
-        @show totloss
-        false
     end)
 
-    tracer = ConvergenceFunction((model, i) -> begin
-        @show i, output_value(model),output_value(model.transformation)
-        @show output_value(model.transformation.ts[1])
-        false
-    end)
-
-    learner = MasterLearner(
-        GradientDescent(FixedLR(Float64(1e-1)), SGD(Float64)),
-        MaxIter(50000),
-        early_stopping
+    # create a gradient descent learner and learn over infinite minibatches
+    learner = make_learner(
+        GradientDescent(1e-3, RMSProp()),
+        # early_stopping,
+        tracer,
+        maxiter = 10000
     )
-    learn!(obj, learner, MiniBatches((train_x, train_y), 10))
+    learn!(obj, learner, infinite_batches(train01, size=10))
+
     obj, learner
 end
 

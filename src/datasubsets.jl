@@ -94,7 +94,8 @@ export
     repeatedly,
     repeated,
     kfolds,
-    leave_one_out
+    leave_one_out,
+    filterobs
 
 abstract AbstractSubset
 abstract AbstractSubsets

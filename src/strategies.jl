@@ -131,9 +131,9 @@ immutable GradientDescent{LR <: LearningRate, PU <: ParamUpdater} <: LearningStr
     lr::LR
     updater::PU
 end
-GradientDescent(lr::LearningRate = FixedLR(1e-3), updater::ParamUpdater = SGD()) = GradientDescent(lr, updater)
+GradientDescent(lr::LearningRate = FixedLR(1e-1), updater::ParamUpdater = RMSProp()) = GradientDescent(lr, updater)
 GradientDescent(updater::ParamUpdater, lr::LearningRate = FixedLR(1e-3)) = GradientDescent(lr, updater)
-GradientDescent(lr::Number, updater::ParamUpdater = SGD()) = GradientDescent(FixedLR(lr), updater)
+GradientDescent(lr::Number, updater::ParamUpdater = RMSProp()) = GradientDescent(FixedLR(lr), updater)
 
 pre_hook(strat::GradientDescent, model) = init(strat.updater, model)
 

@@ -129,6 +129,11 @@ using Transformations.TestTransforms
         @test nobs(train) == 9
         @test nobs(test) == 1
     end
+
+    # filtering
+    newx,newy = filterobs(i -> i%2==0, X, y)
+    @test newx == X[:,2:2:10]
+    @test newy == y[2:2:10]
 end
 
 # Stop the tests
