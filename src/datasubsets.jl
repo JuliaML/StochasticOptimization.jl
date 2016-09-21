@@ -32,24 +32,24 @@
 # ### iterate one batch/partition at a time: batch = (batch_x, batch_y)
 #
 # # one pass through the data in chunks of 10
-# for batch in splitdata(X, y, size=10)
+# for batch in batches(X, y, size=10)
 #     # batch = (view(X, :, i:i+10), view(y, i:i+10))
 #     # we could also do "for (x,yi) in ..."
 # end
 #
-# for batch in splitdata(shuffled(X,y), size=10)
+# for batch in batches(shuffled(X,y), size=10)
 #     # same, but the indices are shuffled first
 # end
 #
 # # a float for size would imply a fractional split.
-# # (I'm pretty sure this notation works if splitdata returns a length-2 iterator)
-# train, test = splitdata(X, y, size = 0.7)
+# # (I'm pretty sure this notation works if batches returns a length-2 iterator)
+# train, test = batches(X, y, size = 0.7)
 #
 # # this would work too, since train and test are tuples of views
-# (train_x, train_y), (test_x, test_y) = splitdata(X, y, size = 0.7)
+# (train_x, train_y), (test_x, test_y) = batches(X, y, size = 0.7)
 #
-# # a tuple or vector of floats could give more than 2 splitdata:
-# train, validate, test = splitdata(X, y, size = (0.6, 0.2))
+# # a tuple or vector of floats could give more than 2 batches:
+# train, validate, test = batches(X, y, size = (0.6, 0.2))
 #
 # for batch in partition_forever(X,y, size=10)
 #     # infinitely sample a random batch
@@ -84,15 +84,17 @@ export
     AbstractSubsets,
     DataSubset,
     DataSubsets,
-    # RandomMiniBatches,
+    KFolds,
 
     eachobs,
     shuffled,
-    splitdata,
     infinite_obs,
+    batches,
     infinite_batches,
     repeatedly,
-    repeated
+    repeated,
+    kfolds,
+    leave_one_out
 
 abstract AbstractSubset
 abstract AbstractSubsets
@@ -125,6 +127,9 @@ nobs(tup::Tuple{}) = 0
 getobs(tup::Tuple{}) = ()
 
 
+default_batch_size(source) = clamp(div(nobs(source), 5), 1, 100)
+
+# ----------------------------------------------------------------------------
 # ----------------------------------------------------------------------------
 
 "Lazy subsetting of source data, tracking the indices of observations in the source data."
@@ -134,6 +139,8 @@ immutable DataSubset{S,I<:AbstractVector{Int}} <: AbstractSubset
 end
 DataSubset(source) = DataSubset(source, 1:nobs(source))
 DataSubset(subset::DataSubset, indices = 1:nobs(subset)) = DataSubset(subset.source, subset.indices[indices])
+
+Base.get(subset::DataSubset) = getobs(subset.source, subset.indices)
 
 Base.length(subset::DataSubset) = length(subset.indices)
 Base.size(subset::DataSubset) = size(subset.indices)
@@ -152,66 +159,6 @@ Base.collect(subset::DataSubset) = collect(getobs(subset.source, subset.indices)
 Base.collect{S<:Tuple}(subset::DataSubset{S}) = map(collect, getobs(subset.source, subset.indices))
 
 # ----------------------------------------------------------------------------
-
-# "Infinite sampler of the source data"
-# immutable InfiniteSampler{S} <: AbstractSubset
-#     source::S
-#     idxfunc::Function  # call this to generate idx... method should take source as input
-# end
-#
-# Base.rand(infsamp::InfiniteSampler) = DataSubset(infsamp.source, infsamp.idxfunc(infsamp.source))
-# Base.getindex(infsamp::InfiniteSampler, idx::Integer) = rand(infsamp)
-# Base.getindex(infsamp::InfiniteSampler, idx::AbstractArray) = rand(infsamp, size(idx)...)
-# Base.done(subsets::InfiniteSampler)
-
-# ----------------------------------------------------------------------------
-
-"An explicit wrapper around an vector of DataSubset"
-immutable DataSubsets{D<:DataSubset} <: AbstractSubsets
-    subsets::Vector{D}
-end
-
-Base.getindex(subsets::DataSubsets, idx) = subsets.subsets[idx]
-Base.start(subsets::DataSubsets) = start(subsets.subsets)
-Base.done(subsets::DataSubsets, i) = done(subsets.subsets)
-Base.next(subsets::DataSubsets, i) = next(subsets.subsets)
-Base.length(subsets::DataSubsets) = length(subsets.subsets)
-Base.size(subsets::DataSubsets) = size(subsets.subsets)
-Base.rand(subsets::DataSubsets) = rand(subsets.subsets)
-Base.collect(subsets::DataSubsets) = map(collect, subsets.subsets)
-
-# ----------------------------------------------------------------------------
-
-
-# ----------------------------------------------------------------------------
-
-default_batch_size(source) = clamp(div(nobs(source), 5), 1, 100)
-
-# "An infinite-length iterator, producing a minibatch for source data (with replacement) at each iteration."
-# immutable RandomMiniBatches{S} <: AbstractSubsets
-#     source::S
-#     batch_size::Int
-# end
-# RandomMiniBatches(source) = RandomMiniBatches(source, default_batch_size(source))
-#
-# Base.start(mb::RandomMiniBatches) = nothing
-# Base.done(mb::RandomMiniBatches, i) = false
-# Base.next(mb::RandomMiniBatches, i) = (DataSubset(mb.source, rand(1:nobs(mb.source), mb.batch_size)), nothing)
-
-# ----------------------------------------------------------------------------
-
-# "just keep giving object `o` at each iteration"
-# type InfiniteGenerator{T} <: AbstractSubsets
-#     o::T
-# end
-# Base.start(ep::InfiniteGenerator) = nothing
-# Base.done(ep::InfiniteGenerator, i) = false
-# Base.next(ep::InfiniteGenerator, i) = ep.o, nothing
-#
-# forever(o) = InfiniteGenerator(o)
-
-# ----------------------------------------------------------------------------
-# convenience API
 
 # call with a tuple for more than one arg
 for f in [:eachobs, :shuffled, :infinite_obs]
@@ -252,26 +199,58 @@ end
 infinite_obs(source) = repeatedly(() -> rand(DataSubset(source)))
 
 """
+Non-copy, non-mutating filter over observation indices.
+
+```julia
+for (x, yi) in filterobs(i -> y[i] < 2, X, y)
+    ...
+end
+```
+"""
+filterobs(f::Function, subset::DataSubset) = getobs(subset.source, filter(f, subset.indices))
+filterobs(f::Function, source) = getobs(source, filter(f, 1:nobs(source)))
+filterobs(f::Function, s_1, s_2, s_rest...) = filterobs(f, (s_1, s_2, s_rest...))
+
+# ----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
+
+"An explicit wrapper around an vector of DataSubset"
+immutable DataSubsets{D<:DataSubset} <: AbstractSubsets
+    subsets::Vector{D}
+end
+
+Base.getindex(subsets::DataSubsets, i::Int) = get(subsets.subsets[i])
+Base.start(subsets::DataSubsets) = 1
+Base.done(subsets::DataSubsets, i) = i > length(subsets.subsets)
+Base.next(subsets::DataSubsets, i) = (get(subsets.subsets[i]), i+1)
+Base.length(subsets::DataSubsets) = length(subsets.subsets)
+Base.size(subsets::DataSubsets) = size(subsets.subsets)
+Base.rand(subsets::DataSubsets) = rand(subsets.subsets)
+Base.collect(subsets::DataSubsets) = map(collect, subsets.subsets)
+
+# ----------------------------------------------------------------------------
+
+"""
 Split the data apart, either by specifying a size or giving a percentage split point.
 
 ```julia
 # split into training and test sets, 60%/40% respectively
-train, test = splitdata(X, Y, size = 0.6)
+train, test = batches(X, Y, size = 0.6)
 
 # split into equal-sized minibatches of 10 observations each
-for batch in splitdata(X, Y, size = 10)
+for batch in batches(X, Y, size = 10)
     ...
 end
 
 # Tips:
 #   - Iterators can be nested
 #   - Observations can be extracted immediately
-for (x,y) in splitdata(shuffled(X, Y), size = 10)
+for (x,y) in batches(shuffled(X, Y), size = 10)
     ...
 end
 ```
 """
-function splitdata(subset::DataSubset; size = default_batch_size(subset.source))
+function batches(subset::DataSubset; size = default_batch_size(subset.source))
     n = nobs(subset)
     idx_list = if typeof(size) <: AbstractFloat
         # partition into 2 sets
@@ -288,9 +267,9 @@ function splitdata(subset::DataSubset; size = default_batch_size(subset.source))
         lst
     end
     @show idx_list
-    DataSubsets(map(idx -> DataSubset(subset, idx), idx_list))
+    subsets = typeof(subset)[DataSubset(subset, idx) for idx in idx_list]
+    DataSubsets(subsets)
 end
-splitdata(source...; kw...) = splitdata(DataSubset(source...); kw...)
 
 """
 Sample a random minibatch (with replacement) repeatedly forever.
@@ -304,5 +283,64 @@ end
 function infinite_batches(subset::DataSubset; size = default_batch_size(subset.source))
     repeatedly(() -> DataSubset(subset.source, rand(1:nobs(subset.source), size)))
 end
-infinite_batches(source; kw...) = infinite_batches(DataSubset(source); kw...)
-infinite_batches(source...; kw...) = infinite_batches(DataSubset(source); kw...)
+
+
+# ----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
+# Iterators of DataSubsets
+
+immutable KFolds{S}
+    subset::DataSubset{S}
+    k::Int
+end
+
+fold_count(kf::KFolds) = div(nobs(kf.subset), kf.k)
+start_index(kf::KFolds, i::Int) = clamp((i-1) * fold_count(kf) + 1, 1, nobs(kf.subset))
+end_index(kf::KFolds, i::Int) = clamp(i * fold_count(kf), 1, nobs(kf.subset))
+
+function Base.getindex(kf::KFolds, idx)
+    test_idx = start_index(kf,idx):end_index(kf,idx)
+    train_idx = setdiff(1:nobs(kf.subset), test_idx)
+    @show train_idx, test_idx
+    kf.subset[train_idx], kf.subset[test_idx]
+end
+Base.start(kf::KFolds) = 1
+Base.done(kf::KFolds, i) = i > kf.k
+Base.next(kf::KFolds, i) = (kf[i], i+1)
+Base.length(kf::KFolds) = kf.k
+Base.size(kf::KFolds) = (kf.k,)
+
+
+"""
+K-Folds validation.  Iterate over k pairs of (train,test) splits, where each test set has approximately nobs/k observations.
+
+```julia
+for (train, test) in kfolds(X, y, k=10)
+    ...
+end
+```
+"""
+kfolds(subset::DataSubset; k::Int = 5) = KFolds(subset, k)
+
+
+"""
+Leave-one-out validation.  K-Folds where k == nobs.
+
+```julia
+for (train, test) in leave_one_out(X, y)
+    ...
+end
+```
+"""
+leave_one_out(subset::DataSubset) = KFolds(subset, nobs(subset))
+
+# ----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
+
+# generic method calls for anything that's not a DataSubset
+for f in [:batches, :infinite_batches, :kfolds, :leave_one_out]
+    @eval begin
+        $f(source; kw...) = $f(DataSubset(source); kw...)
+        $f(source...; kw...) = $f(DataSubset(source); kw...)
+    end
+end

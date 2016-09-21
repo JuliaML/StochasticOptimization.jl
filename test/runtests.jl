@@ -63,10 +63,66 @@ using Transformations.TestTransforms
     # shuffling
     ss = shuffled(X,y)
     @test length(ss.indices) == n
+
+    # test/train split
+    train, test = batches(X,y,size=0.5)
+    # @show train test
+    @test typeof(train) <: Tuple
+    @test typeof(test) <: Tuple
+    @test train[1] == view(X,:,1:2)
+    @test test[1] == view(X,:,3:4)
+    @test train[2] == view(y,1:2)
+    @test test[2] == view(y,3:4)
+    @test nobs(train) == 2
+    @test nobs(test) == 2
+
+    # minibatch split
+    bs = batches(X,y,size=2)
+    @test typeof(bs) <: DataSubsets
+    @test length(bs) == 2
+    for (x,yi) in bs
+        # @show x yi
+        @test typeof(x) <: SubArray
+        @test typeof(yi) <: SubArray
+        @test size(x) == (2,2)
+        @test length(yi) == 2
+        for (xj,yj) in eachobs(x,yi)
+            # just to make sure there's no errors in nesting...
+        end
+    end
+
+    # kfolds
+    X = rand(2,10)
+    y = rand(10)
+    kf = kfolds(X, y)
+    @test typeof(kf) <: KFolds
+    @test kf.k == 5
+    @test StochasticOptimization.start_index(kf, 2) == 3
+    @test StochasticOptimization.end_index(kf, 2) == 4
+    i = 0
+    for (train, test) in kf
+        i += 1
+        @show typeof(train) typeof(test)
+        @test typeof(train) <: Tuple
+        @test typeof(test) <: Tuple
+        @test train == getobs((X,y), setdiff(1:10, 2i-1:2i))
+        @test test == getobs((X,y), 2i-1:2i)
+        @test nobs(train) == 8
+        @test nobs(test) == 2
+    end
+    @test i == kf.k
+
+    loo = leave_one_out(y)
+    @test typeof(loo) <: KFolds
+    @test loo.k == nobs(X)
+    for (train,test) in loo
+        @test nobs(train) == 9
+        @test nobs(test) == 1
+    end
 end
 
 # Stop the tests
-# error()
+error()
 
 using Plots; unicodeplots(show=true,leg=false)
 
