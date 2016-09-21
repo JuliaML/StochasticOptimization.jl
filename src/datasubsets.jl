@@ -252,11 +252,22 @@ end
 """
 function batches(subset::DataSubset; size = default_batch_size(subset.source))
     n = nobs(subset)
-    idx_list = if typeof(size) <: AbstractFloat
+    T = typeof(size)
+    idx_list = if T <: AbstractFloat
         # partition into 2 sets
         n1 = clamp(round(Int, size*n), 1, n)
         [1:n1, n1+1:n]
-    elseif typeof(size) <: Integer
+    elseif (T <: NTuple || T <: AbstractVector) && eltype(T) <: AbstractFloat
+        nleft = n
+        lst = []
+        for (i,sz) in enumerate(size)
+            ni = clamp(round(Int, sz*n), 0, nleft)
+            push!(lst, n-nleft+1:n-nleft+ni)
+            nleft -= ni
+        end
+        push!(lst, n-nleft+1:n)
+        lst
+    elseif T <: Integer
         offset = 0
         lst = []
         while offset < n
@@ -266,7 +277,7 @@ function batches(subset::DataSubset; size = default_batch_size(subset.source))
         end
         lst
     end
-    @show idx_list
+    # @show idx_list
     subsets = typeof(subset)[DataSubset(subset, idx) for idx in idx_list]
     DataSubsets(subsets)
 end
@@ -301,7 +312,7 @@ end_index(kf::KFolds, i::Int) = clamp(i * fold_count(kf), 1, nobs(kf.subset))
 function Base.getindex(kf::KFolds, idx)
     test_idx = start_index(kf,idx):end_index(kf,idx)
     train_idx = setdiff(1:nobs(kf.subset), test_idx)
-    @show train_idx, test_idx
+    # @show train_idx, test_idx
     kf.subset[train_idx], kf.subset[test_idx]
 end
 Base.start(kf::KFolds) = 1

@@ -91,9 +91,19 @@ using Transformations.TestTransforms
         end
     end
 
-    # kfolds
+    # train/validate/test split
     X = rand(2,10)
     y = rand(10)
+    bs = batches(X,y,size=(0.5,0.2))
+    train, validate, test = bs
+    @test nobs(train) == 5
+    @test nobs(validate) == 2
+    @test nobs(test) == 3
+    @test bs.subsets[1].indices == 1:5
+    @test bs.subsets[2].indices == 6:7
+    @test bs.subsets[3].indices == 8:10
+
+    # kfolds
     kf = kfolds(X, y)
     @test typeof(kf) <: KFolds
     @test kf.k == 5
@@ -102,7 +112,7 @@ using Transformations.TestTransforms
     i = 0
     for (train, test) in kf
         i += 1
-        @show typeof(train) typeof(test)
+        # @show typeof(train) typeof(test)
         @test typeof(train) <: Tuple
         @test typeof(test) <: Tuple
         @test train == getobs((X,y), setdiff(1:10, 2i-1:2i))
@@ -122,7 +132,7 @@ using Transformations.TestTransforms
 end
 
 # Stop the tests
-error()
+# error()
 
 using Plots; unicodeplots(show=true,leg=false)
 
