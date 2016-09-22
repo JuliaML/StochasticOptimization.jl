@@ -1,5 +1,9 @@
 
+# this might be used for Nesterov lookahead, or similar
+before_grad_calc(θ::AbstractVector, updater::ParamUpdater, ∇::AbstractVector) = return
+
 # TODO: add citations/links for each method
+# note: good ref: http://sebastianruder.com/optimizing-gradient-descent/
 # note: good ref: https://www.quora.com/What-are-differences-between-update-rules-like-AdaDelta-RMSProp-AdaGrad-and-AdaM
 
 "Stochastic Gradient Descent with Momentum"
@@ -16,11 +20,21 @@ function init(updater::SGD, model)
     return
 end
 
+# add momentum into θ, and reset last_Δ
+function before_grad_calc(θ::AbstractVector, updater::SGD, ∇::AbstractVector)
+    for (i,k) in zip(eachindex(θ), eachindex(updater.last_Δ))
+        momchg = updater.mom * updater.last_Δ[k]
+        updater.last_Δ[k] = momchg
+        θ[i] += momchg
+    end
+end
+
+#
 function update!(θ::AbstractVector, updater::SGD, ∇::AbstractVector, lr::Number)
     for (i,j,k) in zip(eachindex(θ), eachindex(∇), eachindex(updater.last_Δ))
-        chg = -lr * ∇[j] + updater.mom * updater.last_Δ[k]
+        chg = -lr * ∇[j]
         θ[i] += chg
-        updater.last_Δ[k] = chg
+        updater.last_Δ[k] += chg
     end
 end
 
@@ -188,10 +202,11 @@ type RMSProp{T<:Number} <: ParamUpdater
     RMSProp(γ::T) = new(γ)
 end
 RMSProp{T}(::Type{T}, γ = T(0.95)) = RMSProp{T}(T(γ))
+RMSProp{T}(γ::T) = RMSProp{T}(γ)
 RMSProp() = RMSProp{Float64}(0.95)
 
 function init(updater::RMSProp, model)
-    updater.g = zeros(params(model))
+    updater.g = ones(params(model))
     return
 end
 

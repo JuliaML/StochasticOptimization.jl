@@ -141,6 +141,8 @@ pre_hook(strat::GradientDescent, model) = init(strat.updater, model)
 function learn!(model, strat::GradientDescent, subset::AbstractSubset)
     θ = params(model)
     ∇ = grad(model)
+    before_grad_calc(θ, strat.updater, ∇)
+    
     ∇avg = zeros(θ)
     scalar = 1 / nobs(subset)
     for (input,target) in subset
@@ -164,10 +166,13 @@ function learn!(model, strat::GradientDescent, obs::Tuple)
     input, target = obs
 
     # forward and backward passes for this datapoint
+    θ = params(model)
+    ∇ = grad(model)
+    before_grad_calc(θ, strat.updater, ∇)
     transform!(model, target, input)
     grad!(model)
 
     # update the params using the gradient
     lr = value(strat.lr)
-    update!(params(model), strat.updater, grad(model), lr)
+    update!(θ, strat.updater, ∇, lr)
 end
