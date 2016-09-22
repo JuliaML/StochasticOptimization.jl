@@ -32,6 +32,13 @@ function doit()
     train = MNIST.traindata()
     test = MNIST.testdata()
 
+    # TODO: normalize
+    # μ = mean(train[1])
+    # σ = std(train[1])
+    # @show map(size,(μ,σ))
+    # train_x = convert(Matrix{Float64}, (train_x) / σ)
+    # test_x = convert(Matrix{Float64}, (test_x) / σ)
+
     # scale pixels to [0,1]
     train[1][:] ./= 255
     test[1][:] ./= 255
