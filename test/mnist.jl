@@ -54,24 +54,26 @@ function doit()
     # At this point we have train and test where each column of x is length-784 corresponding to pixel intensities,
     # and each column of y is length-10 corresponding to output class.
 
-    nin, nh, nout = 784, [10, 30], 10
+    nin, nh, nout = 784, [3], 10
 
     # build our objective... a neural net with nh hidden nodes,
     # tanh activation on the hidden layer, and logistic output
     t = nnet(nin, nout, nh, :softplus, :softmax)
-    obj = objective(t, L1Penalty(1e-4))
+    obj = objective(t, L2Penalty(1e-3))
     @show obj
 
     # parameter plots
-    pidx = [1,3,5]
-    pvalplts = [TracePlot(length(params(t[i])), title="params: $i") for i=pidx]
-    pgradplts = [TracePlot(length(params(t[i])), title="grad: $i") for i=pidx]
+    pidx = [1,3]
+    pvalplts = [TracePlot(length(params(t[i])), title="$(t[i])") for i=pidx]
+    ylabel!(pvalplts[1].plt, "Param Vals")
+    pgradplts = [TracePlot(length(params(t[i]))) for i=pidx]
+    ylabel!(pgradplts[1].plt, "Param Grads")
 
     # nnet plots of values and gradients
     valinplts = [TracePlot(input_length(t[i]), title="input", yguide="Layer Value") for i=1:1]
     valoutplts = [TracePlot(output_length(t[i]), title="$(t[i])", titlepos=:left) for i=1:length(t)]
     gradinplts = [TracePlot(input_length(t[i]), title="input", yguide="Layer Grad") for i=1:1]
-    gradoutplts = [TracePlot(output_length(t[i]), title="$(t[i])", titlepos=:left) for i=1:length(t)]
+    gradoutplts = [TracePlot(output_length(t[i]), ) for i=1:length(t)]
 
     # loss/accuracy plots
     lossplt = TracePlot(title="Test Loss", ylim=(0,Inf))
@@ -126,6 +128,9 @@ function doit()
             add_data(accuracyplt, i, totcorrect/totcount)
         end
 
+        # build a heatmap of the total outgoing weight from each pixel
+        pixel_importance = reshape(sum(t[1].params.views[1],1), 28, 28)
+
         # build a nested-grid layout for all the trace plots
         getplt(p) = p.plt
         plot(
@@ -135,8 +140,9 @@ function doit()
                     gradinplts, gradoutplts,
                     lossplt, accuracyplt
                 ))...,
+            heatmap(pixel_importance, ratio=1),
             size = (1400,1000),
-            layout=@layout([grid(2,length(pvalplts)); grid(2,length(valoutplts)+1); grid(1,2){0.2h}])
+            layout=@layout([grid(2,length(pvalplts)); grid(2,length(valoutplts)+1); grid(1,3){0.2h}])
         ); gui()
     end)
 
@@ -145,11 +151,11 @@ function doit()
 
     # create a gradient descent learner and learn over infinite minibatches
     learner = make_learner(
-        GradientDescent(1e-3, RMSProp(0.9)),
+        GradientDescent(5e-3, RMSProp(0.9)),
         # GradientDescent(1e-1, SGD(0.3)),
         # early_stopping,
         tracer,
-        maxiter = 10000
+        maxiter = 20000
     )
     learn!(obj, learner, infinite_batches(train, size=5))
 
