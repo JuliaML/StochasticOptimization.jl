@@ -142,15 +142,15 @@ function learn!(model, strat::GradientDescent, subset::AbstractSubset)
     θ = params(model)
     ∇ = grad(model)
     ∇avg = zeros(θ)
-    scalar = 1 / length(subset)
+    scalar = 1 / nobs(subset)
     for (input,target) in subset
         # forward and backward passes for this datapoint
         transform!(model, target, input)
         grad!(model)
 
         # add to the total param change for this strat/gradient
-        for (i,j) in zip(eachindex(∇avg), eachindex(∇))
-            ∇avg[i] += ∇[j] * scalar
+        for i in 1:length(∇)
+            ∇avg[i] += ∇[i] * scalar
         end
     end
 

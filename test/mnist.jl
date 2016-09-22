@@ -23,6 +23,7 @@ function add_data(tp::TracePlot, x::Number, y::AbstractVector)
 end
 add_data(tp::TracePlot, x::Number, y::Number) = add_data(tp, x, [y])
 
+
 # ----------------------------------------------------------------------------
 
 function doit()
@@ -63,21 +64,35 @@ function doit()
     # build our objective... a neural net with nh hidden nodes,
     # tanh activation on the hidden layer, and logistic output
     t = nnet(nin, nout, [nh], :tanh, :logistic)
-    obj = objective(t, L1Penalty(1e-4))
+    obj = objective(t) #, L1Penalty(1e-4))
+    @show obj
 
+
+    θ = params(t[1])
+    ∇ = grad(t[1])
+    np = length(θ)
 
     # store 200 random weights
-    θ = params(t)
-    np = length(θ)
-    ni = 200
+    ni = 2000
     indices = rand(1:np, ni)
     wplt = TracePlot(ni, title="Param Weights")
+    gplt = TracePlot(ni, title="Gradients")
 
     lossplt = TracePlot(title="Test Loss")
+    accuracyplt = TracePlot(title="Accuracy")
+
+
     outplts = [
         TracePlot(output_length(t[1]), l=0.2, m=(3,0.3,stroke(0)), title="First Affine Outputs"),
         TracePlot(output_length(t[3]), l=0.2, m=(5,0.5,stroke(0)), title="Second Affine Outputs"),
     ]
+
+    pvalplts = [TracePlot(length(params(t[i])), title="param val, i=$i") for i=1:length(t)]
+    pgradplts = [TracePlot(length(params(t[i])), title="param grad, i=$i") for i=1:length(t)]
+    valinplts = [TracePlot(input_length(t[i]), title="in val, i=$i") for i=1:length(t)]
+    valoutplts = [TracePlot(output_length(t[i]), title="out val, i=$i") for i=1:length(t)]
+    gradinplts = [TracePlot(input_length(t[i]), title="in grad, i=$i") for i=1:length(t)]
+    gradoutplts = [TracePlot(output_length(t[i]), title="out grad, i=$i") for i=1:length(t)]
 
     # early_stopping = ConvergenceFunction((model,i) -> begin
     #     false
@@ -87,36 +102,61 @@ function doit()
         n = 50
         mod1(i,n)==n || return false
 
+        # add to the trace plots
+        add_data(wplt, i, θ[indices])
+        add_data(gplt, i, ∇[indices])
+        for j=1:length(t)
+            add_data(pvalplts[j], i, params(t[j]))
+            add_data(pgradplts[j], i, grad(t[j]))
+            add_data(valinplts[j], i, input_value(t[j]))
+            add_data(valoutplts[j], i, output_value(t[j]))
+            add_data(gradinplts[j], i, input_grad(t[j]))
+            add_data(gradoutplts[j], i, output_grad(t[j]))
+        end
+        add_data(outplts[1], i, output_value(t[1]))
+        add_data(outplts[2], i, output_value(t[3]))
 
         # sample 50 points from the test set and compute/save the loss
         totloss = 0.0
-        for (x,y) in eachobs(rand(eachobs(test01), 50))
+        totcorrect = 0
+        totcount = 50
+        for (x,y) in eachobs(rand(eachobs(test01), totcount))
             totloss += transform!(model,y,x)
+            ŷ = output_value(t)[1]
+            correct = (ŷ > 0 && y > 0) || (ŷ <= 0 && y == 0)
+            totcorrect += correct
         end
-        @show i,totloss
-
-        # add to the trace plots
-        add_data(wplt, i, θ[indices])
-        add_data(outplts[1], i, output_value(t[1]))
-        add_data(outplts[2], i, output_value(t[3]))
+        @show i,totloss, totcorrect/totcount
         add_data(lossplt, i, totloss)
+        add_data(accuracyplt, i, totcorrect/totcount)
 
         plot(
-            wplt.plt,
+            # wplt.plt,
+            # gplt.plt,
+            [pvalplts[i].plt for i=[1,3]]...,
+            [pgradplts[i].plt for i=[1,3]]...,
+            [valinplts[i].plt for i=1:4]...,
+            [valoutplts[i].plt for i=1:4]...,
+            [gradinplts[i].plt for i=1:4]...,
+            [gradoutplts[i].plt for i=1:4]...,
             lossplt.plt,
-            outplts[1].plt,
-            outplts[2].plt,
-            layout=@layout([a;b{0.2h};c d])
+            accuracyplt.plt,
+            # outplts[1].plt,
+            # outplts[2].plt,
+            size = (700,1000),
+            layout=@layout([grid(2,2); grid(4,4); grid(1,2){0.2h}])
         ); gui()
     end)
 
     # create a gradient descent learner and learn over infinite minibatches
     learner = make_learner(
-        GradientDescent(1e-3, RMSProp()),
+        GradientDescent(5e-1, RMSProp()),
+        # GradientDescent(1e-2, SGD()),
         # early_stopping,
         tracer,
         maxiter = 10000
     )
+    # learn!(obj, learner, infinite_batches(getobs(train01,1:1), size=10))
     learn!(obj, learner, infinite_batches(train01, size=10))
 
     obj, learner
