@@ -4,23 +4,31 @@ using Learn
 import MNIST
 using MLDataUtils
 using StatsBase
+
+ENV["GKS_WSTYPE"] = "x11"
 using StatPlots; gr(leg=false, linealpha=0.5)
 
 # ----------------------------------------------------------------------------
 # TODO: add this to MLPlots??
 
 # a helper class to track many variables at once over time
-type TracePlot{T}
-    n::Int
+type TracePlot{I,T}
+    indices::I
     plt::Plot{T}
 end
-function TracePlot(n::Int = 1; kw...)
-    plt = plot(n; kw...)
-    TracePlot(n,plt)
+function TracePlot(n::Int = 1; maxn::Int = 500, kw...)
+    indices = if n > maxn
+        # sample maxn
+        shuffle(1:n)[1:maxn]
+    else
+        1:n
+    end
+    plt = plot(length(indices); kw...)
+    TracePlot(indices, plt)
 end
 function add_data(tp::TracePlot, x::Number, y::AbstractVector)
-    for (i,series) in enumerate(tp.plt.series_list)
-        push!(series, x, y[i])
+    for (i,idx) in enumerate(tp.indices)
+        push!(tp.plt.series_list[i], x, y[idx])
     end
 end
 add_data(tp::TracePlot, x::Number, y::Number) = add_data(tp, x, [y])
@@ -54,16 +62,18 @@ function doit()
     # At this point we have train and test where each column of x is length-784 corresponding to pixel intensities,
     # and each column of y is length-10 corresponding to output class.
 
-    nin, nh, nout = 784, [3], 10
+    nin, nh, nout = 784, [50,50], 10
 
     # build our objective... a neural net with nh hidden nodes,
     # tanh activation on the hidden layer, and logistic output
     t = nnet(nin, nout, nh, :softplus, :softmax)
-    obj = objective(t, L2Penalty(1e-3))
+    # penalty = L2Penalty(1e-3)
+    penalty = ElasticNetPenalty(1e-5)
+    obj = objective(t, penalty)
     @show obj
 
     # parameter plots
-    pidx = [1,3]
+    pidx = 1:2:length(t)
     pvalplts = [TracePlot(length(params(t[i])), title="$(t[i])") for i=pidx]
     ylabel!(pvalplts[1].plt, "Param Vals")
     pgradplts = [TracePlot(length(params(t[i]))) for i=pidx]
@@ -72,12 +82,15 @@ function doit()
     # nnet plots of values and gradients
     valinplts = [TracePlot(input_length(t[i]), title="input", yguide="Layer Value") for i=1:1]
     valoutplts = [TracePlot(output_length(t[i]), title="$(t[i])", titlepos=:left) for i=1:length(t)]
-    gradinplts = [TracePlot(input_length(t[i]), title="input", yguide="Layer Grad") for i=1:1]
-    gradoutplts = [TracePlot(output_length(t[i]), ) for i=1:length(t)]
+    gradinplts = [TracePlot(input_length(t[i]), yguide="Layer Grad") for i=1:1]
+    gradoutplts = [TracePlot(output_length(t[i])) for i=1:length(t)]
 
     # loss/accuracy plots
     lossplt = TracePlot(title="Test Loss", ylim=(0,Inf))
-    accuracyplt = TracePlot(title="Accuracy", ylim=(0,1))
+    accuracyplt = TracePlot(title="Accuracy", ylim=(0.6,1))
+
+    doanim = false
+    # anim = Animation()
 
     # early_stopping = ConvergenceFunction((model,i) -> begin
     #     false
@@ -130,6 +143,7 @@ function doit()
 
         # build a heatmap of the total outgoing weight from each pixel
         pixel_importance = reshape(sum(t[1].params.views[1],1), 28, 28)
+        hmplt = heatmap(pixel_importance, ratio=1)
 
         # build a nested-grid layout for all the trace plots
         getplt(p) = p.plt
@@ -140,10 +154,26 @@ function doit()
                     gradinplts, gradoutplts,
                     lossplt, accuracyplt
                 ))...,
-            heatmap(pixel_importance, ratio=1),
+            hmplt,
             size = (1400,1000),
             layout=@layout([grid(2,length(pvalplts)); grid(2,length(valoutplts)+1); grid(1,3){0.2h}])
-        ); gui()
+        )
+
+        if doanim
+            lastframe = 5000
+            if i < lastframe
+                frame(anim)
+            elseif i == lastframe
+                gif(anim, fps=10)
+            end
+        end
+
+        gui()
+        # if i>0
+        #     @profile gui()
+        # else
+        #     gui()
+        # end
     end)
 
     # trace once before we start learning to see initial values
@@ -151,11 +181,12 @@ function doit()
 
     # create a gradient descent learner and learn over infinite minibatches
     learner = make_learner(
-        GradientDescent(5e-3, RMSProp(0.9)),
+        # GradientDescent(5e-3, RMSProp(0.9)),
+        GradientDescent(5e-2, Adadelta()),
         # GradientDescent(1e-1, SGD(0.3)),
         # early_stopping,
         tracer,
-        maxiter = 20000
+        maxiter = 50000
     )
     learn!(obj, learner, infinite_batches(train, size=5))
 
