@@ -36,6 +36,26 @@ add_data(tp::TracePlot, x::Number, y::Number) = add_data(tp, x, [y])
 
 # ----------------------------------------------------------------------------
 
+function my_test_loss(obj, testdata, totcount = 500)
+    totloss = 0.0
+    totcorrect = 0
+    for (x,y) in eachobs(rand(eachobs(testdata), totcount))
+        totloss += transform!(obj,y,x)
+
+        # logistic version:
+        # ŷ = output_value(obj.transformation)[1]
+        # correct = (ŷ > 0.5 && y > 0.5) || (ŷ <= 0.5 && y < 0.5)
+
+        # softmax version:
+        ŷ = output_value(obj.transformation)
+        chosen_idx = indmax(ŷ)
+        correct = y[chosen_idx] > 0
+
+        totcorrect += correct
+    end
+    totloss, totcorrect/totcount
+end
+
 function doit()
 
     # our data:
@@ -92,11 +112,11 @@ function doit()
     doanim = false
     # anim = Animation()
 
-    # early_stopping = ConvergenceFunction((model,i) -> begin
+    # early_stopping = ConvergenceFunction((obj,i) -> begin
     #     false
     # end)
 
-    tracer = IterFunction((model, i) -> begin
+    tracer = IterFunction((obj, i) -> begin
         n = 100
         mod1(i,n)==n || return false
 
@@ -119,26 +139,10 @@ function doit()
         # sample points from the test set and compute/save the loss
         @show i
         if mod1(i,500)==500
-            totloss = 0.0
-            totcorrect = 0
-            totcount = 500
-            for (x,y) in eachobs(rand(eachobs(test), totcount))
-                totloss += transform!(model,y,x)
-
-                # logistic version:
-                # ŷ = output_value(t)[1]
-                # correct = (ŷ > 0.5 && y > 0.5) || (ŷ <= 0.5 && y < 0.5)
-
-                # softmax version:
-                ŷ = output_value(t)
-                chosen_idx = indmax(ŷ)
-                correct = y[chosen_idx] > 0
-
-                totcorrect += correct
-            end
-            @show totloss, totcorrect/totcount
+            totloss, accuracy = my_test_loss(obj, test, 500)
+            @show totloss, accuracy
             add_data(lossplt, i, totloss)
-            add_data(accuracyplt, i, totcorrect/totcount)
+            add_data(accuracyplt, i, accuracy)
         end
 
         # build a heatmap of the total outgoing weight from each pixel
@@ -156,7 +160,11 @@ function doit()
                 ))...,
             hmplt,
             size = (1400,1000),
-            layout=@layout([grid(2,length(pvalplts)); grid(2,length(valoutplts)+1); grid(1,3){0.2h}])
+            layout=@layout([
+                grid(2,length(pvalplts))
+                grid(2,length(valoutplts)+1)
+                grid(1,3){0.2h}
+            ])
         )
 
         if doanim
