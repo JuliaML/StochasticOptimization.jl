@@ -10,7 +10,7 @@ using ObjectiveFunctions
 using CatViews
 nin, nout = 10, 1
 
-# Build our objective. Note this is linear ridge regression.
+# Build our objective. Note this is LASSO regression.
 t = Affine(nin,nout)
 l = L2DistLoss()
 p = L1Penalty(1e-8)
