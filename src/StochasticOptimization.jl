@@ -4,7 +4,6 @@ module StochasticOptimization
 
 using Reexport
 @reexport using LearnBase
-using Parameters
 
 import LearnBase: value, learn!, update!
 
@@ -17,9 +16,6 @@ export
     IterFunction,
     GradientLearner,
     make_learner,
-
-    # forever,
-    # eachobs,
 
     pre_hook,
     iter_hook,
