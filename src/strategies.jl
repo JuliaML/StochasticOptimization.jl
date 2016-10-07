@@ -124,55 +124,89 @@ end
 
 # ---------------------------------------------------------------------------------
 
-"""
-A Stochastic Gradient Descent learner, with LearningRate lr and ParamUpdater updater (SGD, Adam, etc)
-"""
-immutable GradientLearner{LR <: LearningRate, PU <: ParamUpdater} <: LearningStrategy
-    lr::LR
-    updater::PU
-end
-GradientLearner(lr::LearningRate = FixedLR(1e-1), updater::ParamUpdater = RMSProp()) = GradientLearner(lr, updater)
-GradientLearner(updater::ParamUpdater, lr::LearningRate = FixedLR(1e-3)) = GradientLearner(lr, updater)
-GradientLearner(lr::Number, updater::ParamUpdater = RMSProp()) = GradientLearner(FixedLR(lr), updater)
+abstract StateUpdater
 
-pre_hook(strat::GradientLearner, model) = init(strat.updater, model)
+immutable NoUpdater <: StateUpdater end
+state!(model, su::NoUpdater, obs...) = return
+
+immutable BackpropUpdater <: StateUpdater end
+function state!(model, su, target, input)
+    transform!(model, target, input)
+    grad!(model)
+    return
+end
+
+# ---------------------------------------------------------------------------------
+
+"""
+A sub-learner which can update model parameters using a search direction (which might be an estimate
+    of the gradient), with LearningRate lr and ParamUpdater pu (SGD, Adam, etc).
+
+The GradientLearner will update its internal state using the StateUpdater.
+"""
+immutable GradientLearner{LR <: LearningRate, PU <: ParamUpdater, SU <: StateUpdater} <: LearningStrategy
+    lr::LR
+    pu::PU
+    su::SU
+end
+
+function GradientLearner(lr::LearningRate = FixedLR(1e-1),
+                         pu::ParamUpdater = RMSProp(),
+                         su::StateUpdater = BackpropUpdater())
+    GradientLearner(lr, pu, su)
+end
+function GradientLearner(pu::ParamUpdater,
+                         lr::LearningRate = FixedLR(1e-3),
+                         su::StateUpdater = BackpropUpdater())
+    GradientLearner(lr, pu, su)
+end
+function GradientLearner(lr::Number,
+                         pu::ParamUpdater = RMSProp(),
+                         su::StateUpdater = BackpropUpdater())
+    GradientLearner(FixedLR(lr), pu, su)
+end
+
+pre_hook(gl::GradientLearner, model) = init(gl.pu, model)
 
 # minibatch learning.  update with average gradient
-function learn!(model, strat::GradientLearner, subset::AbstractSubset)
+function learn!(model, gl::GradientLearner, subset::AbstractSubset)
     θ = params(model)
     ∇ = grad(model)
-    before_grad_calc(θ, strat.updater, ∇)
-    
+    before_grad_calc(θ, gl.pu, ∇)
+
     ∇avg = zeros(θ)
     scalar = 1 / nobs(subset)
     for (input,target) in subset
-        # forward and backward passes for this datapoint
-        transform!(model, target, input)
-        grad!(model)
+        state!(model, gl.su, target, input)
+        # # forward and backward passes for this datapoint
+        # transform!(model, target, input)
+        # grad!(model)
 
-        # add to the total param change for this strat/gradient
+        # add to the total param change for this gl/gradient
         for i in 1:length(∇)
             ∇avg[i] += ∇[i] * scalar
         end
     end
 
     # update the params using the average gradient
-    lr = value(strat.lr)
-    update!(θ, strat.updater, ∇avg, lr)
+    lr = value(gl.lr)
+    update!(θ, gl.pu, ∇avg, lr)
 end
 
 # stochastic learning.  update with a single gradient
-function learn!(model, strat::GradientLearner, obs::Tuple)
+function learn!(model, gl::GradientLearner, obs::Tuple)
     input, target = obs
 
     # forward and backward passes for this datapoint
     θ = params(model)
     ∇ = grad(model)
-    before_grad_calc(θ, strat.updater, ∇)
-    transform!(model, target, input)
-    grad!(model)
+    before_grad_calc(θ, gl.pu, ∇)
+
+    state!(model, gl.su, target, input)
+    # transform!(model, target, input)
+    # grad!(model)
 
     # update the params using the gradient
-    lr = value(strat.lr)
-    update!(θ, strat.updater, ∇, lr)
+    lr = value(gl.lr)
+    update!(θ, gl.pu, ∇, lr)
 end
