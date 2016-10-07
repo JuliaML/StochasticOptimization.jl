@@ -8,13 +8,16 @@ Utilizing the JuliaML ecosystem, StochasticOptimization is a framework for itera
 using StochasticOptimization
 using ObjectiveFunctions
 using CatViews
-nin, nout = 10, 1
 
 # Build our objective. Note this is LASSO regression.
-t = Affine(nin,nout)
-l = L2DistLoss()
-p = L1Penalty(1e-8)
-obj = RegularizedObjective(t, l, p)
+# The objective method constucts a RegularizedObjective composed
+#   of a Transformation, a Loss, and an optional Penalty.
+nin, nout = 10, 1
+obj = objective(
+    Affine(nin,nout),
+    L2DistLoss(),
+    L1Penalty(1e-8)
+)
 
 # Create some fake data... affine transform plus noise
 τ = 1000
@@ -24,40 +27,43 @@ inputs = randn(nin, τ)
 noise = 0.1rand(nout, τ)
 targets = w * inputs + repmat(b, 1, τ) + noise
 
-# Our core learning strategy... uses Adamax with a fixed learning rate
-strat = GradientDescent(FixedLR(5e-3), Adamax())
-
 # Create a view of w and b which looks like a single vector
 θ = CatView(w,b)
 
-# Check for convergence to the true parameter vector.
-# This is an example of a custom convergence check.
-θ_converge = ConvergenceFunction((model,i) -> begin
-    if mod1(i,100) == 100
-        normw = norm(θ - params(model))
-        @show i,normw
-        if normw < 0.1
-            info("Converged after $i iterations: $normw")
-            return true
+# The MetaLearner has a bunch of specialized sub-learners.
+# Our core learning strategy is Adamax with a fixed learning rate.
+# The `maxiter` and `converged` keywords will add `MaxIter`
+#   and `ConvergenceFunction` sub-learners to the MetaLearner.
+learner = make_learner(
+    GradientLearner(5e-3, Adamax()),
+    maxiter = 5000,
+    converged = (model,i) -> begin
+        if mod1(i,100) == 100
+            if norm(θ - params(model)) < 0.1
+                info("Converged after $i iterations")
+                return true
+            end
         end
+        false
     end
-    false
-end)
-
-# The MasterLearner has a bunch of specialized sub-learners.
-learner = MasterLearner(
-    strat,
-    MaxIter(5000),
-    θ_converge
 )
 
-# Note: Each sub-learner might only implement a subset of the iteration API:
-#   pre_hook(learner, model)
-#   learn!(model, learner, data)
-#   iter_hook(learner, model, i)
-#   finished(learner, model, i)
-#   post_hook(learner, model)
-
-# Everything is set up... learn the parameters
-learn!(obj, learner, MiniBatches((inputs, targets), 20))
+# Everything is set up... learn the parameters by iterating through
+#   random minibatches forever until convergence, or until the max iterations.
+learn!(obj, learner, infinite_batches(inputs, targets, size=20))
 ```
+
+With any luck, you'll see something like:
+
+```
+INFO: Converged after 800 iterations
+```
+
+### Notes:
+
+Each sub-learner might only implement a subset of the iteration API:
+- `pre_hook(learner, model)`
+- `learn!(model, learner, data)`
+- `iter_hook(learner, model, i)`
+- `finished(learner, model, i)`
+- `post_hook(learner, model)`

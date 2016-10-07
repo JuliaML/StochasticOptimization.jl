@@ -30,7 +30,7 @@ function doit()
     obj = objective(chain, CrossentropyLoss(), L1Penalty(1e-6))
 
     learner = make_learner(
-        GradientDescent(FixedLR(1e-4), SGD()),
+        GradientLearner(FixedLR(1e-4), SGD()),
         maxiter = 10000,
         oniter = (model,i) -> begin
             @show i

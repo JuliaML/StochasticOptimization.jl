@@ -189,9 +189,9 @@ function doit()
 
     # create a gradient descent learner and learn over infinite minibatches
     learner = make_learner(
-        # GradientDescent(5e-3, RMSProp(0.9)),
-        GradientDescent(5e-2, Adadelta()),
-        # GradientDescent(1e-1, SGD(0.3)),
+        # GradientLearner(5e-3, RMSProp(0.9)),
+        GradientLearner(5e-2, Adadelta()),
+        # GradientLearner(1e-1, SGD(0.3)),
         # early_stopping,
         tracer,
         maxiter = 50000
