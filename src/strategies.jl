@@ -130,7 +130,7 @@ immutable NoUpdater <: StateUpdater end
 state!(model, su::NoUpdater, obs...) = return
 
 immutable BackpropUpdater <: StateUpdater end
-function state!(model, su, target, input)
+function state!(model, su::BackpropUpdater, target, input)
     transform!(model, target, input)
     grad!(model)
     return
@@ -178,9 +178,6 @@ function learn!(model, gl::GradientLearner, subset::AbstractSubset)
     scalar = 1 / nobs(subset)
     for (input,target) in subset
         state!(model, gl.su, target, input)
-        # # forward and backward passes for this datapoint
-        # transform!(model, target, input)
-        # grad!(model)
 
         # add to the total param change for this gl/gradient
         for i in 1:length(∇)
@@ -203,8 +200,6 @@ function learn!(model, gl::GradientLearner, obs::Tuple)
     before_grad_calc(θ, gl.pu, ∇)
 
     state!(model, gl.su, target, input)
-    # transform!(model, target, input)
-    # grad!(model)
 
     # update the params using the gradient
     lr = value(gl.lr)
