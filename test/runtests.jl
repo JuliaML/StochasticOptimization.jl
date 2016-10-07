@@ -153,7 +153,7 @@ using Plots; unicodeplots(show=true,leg=false)
     startvals = 8rand(n)-4
     @show startvals
 
-    # build a MasterLearner to use RMSProp w/ fixed learning rate,
+    # build a MetaLearner to use RMSProp w/ fixed learning rate,
     # setting max iterations, a custom convergence check, and a
     # custom iteration callback to collect data to plot
     converged = (m,i) -> output_value(m)[1] < 1e-8
@@ -175,7 +175,7 @@ using Plots; unicodeplots(show=true,leg=false)
                     ]
         @show T,lr
         learner = make_learner(
-            GradientDescent(lr, T()),
+            GradientLearner(lr, T()),
             # TimeLimit(10),
             maxiter = maxiter,
             converged = converged
@@ -193,7 +193,7 @@ using Plots; unicodeplots(show=true,leg=false)
     # rerun while tracking x/y
     x,y = zeros(0),zeros(0)
     learner = make_learner(
-        GradientDescent(FixedLR(1e-3), RMSProp()),
+        GradientLearner(FixedLR(1e-3), RMSProp()),
         maxiter = 50000,
         converged = converged,
         oniter = (m,i) -> begin
@@ -252,7 +252,7 @@ end
     targets = w * inputs + repmat(b, 1, τ) + 0.1randn(nout, τ)
 
     # our learning strategy... SGD with a fixed learning rate
-    strat = GradientDescent(FixedLR(5e-3), Adamax())
+    strat = GradientLearner(FixedLR(5e-3), Adamax())
 
     # add norms to a trace vector
     tracer = NormTracer(θ)
@@ -270,7 +270,7 @@ end
         false
     end)
 
-    # the MasterLearner have a bunch of specialized sub-learners
+    # the MetaLearner have a bunch of specialized sub-learners
     learner = make_learner(
         strat,
         tracer,
