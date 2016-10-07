@@ -13,45 +13,45 @@ learn!(model, strat::LearningStrategy, data)  = return
 
 # Meta-learner that can compose sub-managers of optimization components in a type-stable way.
 # A sub-manager is any LearningStrategy, and may implement any subset of callbacks.
-type MasterLearner{MGRS <: Tuple} <: LearningStrategy
+type MetaLearner{MGRS <: Tuple} <: LearningStrategy
     managers::MGRS
 end
 
-function MasterLearner(mgrs::LearningStrategy...)
-    MasterLearner(mgrs)
+function MetaLearner(mgrs::LearningStrategy...)
+    MetaLearner(mgrs)
 end
 
-pre_hook(master::MasterLearner,  model)    = foreach(mgr -> pre_hook(mgr, model),      master.managers)
-iter_hook(master::MasterLearner, model, i) = foreach(mgr -> iter_hook(mgr, model, i),  master.managers)
-finished(master::MasterLearner,  model, i) = any(mgr     -> finished(mgr, model, i),   master.managers)
-post_hook(master::MasterLearner, model)    = foreach(mgr -> post_hook(mgr, model),     master.managers)
+pre_hook(meta::MetaLearner,  model)    = foreach(mgr -> pre_hook(mgr, model),      meta.managers)
+iter_hook(meta::MetaLearner, model, i) = foreach(mgr -> iter_hook(mgr, model, i),  meta.managers)
+finished(meta::MetaLearner,  model, i) = any(mgr     -> finished(mgr, model, i),   meta.managers)
+post_hook(meta::MetaLearner, model)    = foreach(mgr -> post_hook(mgr, model),     meta.managers)
 
 # This is the core iteration loop.  Loop through batches checking for early stopping after each subset
-function learn!(model, master::MasterLearner, data)
-    pre_hook(master, model)
+function learn!(model, meta::MetaLearner, data)
+    pre_hook(meta, model)
     for (i, obs) in enumerate(data)
         # update the params for this subset
-        # learn!(model, master, subset)
-        for mgr in master.managers
+        # learn!(model, meta, subset)
+        for mgr in meta.managers
             learn!(model, mgr, obs)
         end
 
-        iter_hook(master, model, i)
-        finished(master, model, i) && break
+        iter_hook(meta, model, i)
+        finished(meta, model, i) && break
     end
-    post_hook(master, model)
+    post_hook(meta, model)
 end
 
-# TODO: can we instead use generated functions for each MasterLearner callback so that they are ONLY called for
+# TODO: can we instead use generated functions for each MetaLearner callback so that they are ONLY called for
 #   those methods which the manager explicitly implements??  We'd need to have a type-stable way
 #   of checking whether that manager implements that method.
 
-# @generated function pre_hook(master::MasterLearner, model)
+# @generated function pre_hook(meta::MetaLearner, model)
 #     body = quote end
-#     mgr_types = master.parameters[1]
+#     mgr_types = meta.parameters[1]
 #     for (i,T) in enumerate(mgr_types)
 #         if is_implemented(T, :pre_hook)
-#             push!(body.args, :(pre_hook(master.managers[$i], model)))
+#             push!(body.args, :(pre_hook(meta.managers[$i], model)))
 #         end
 #     end
 #     body
@@ -114,12 +114,12 @@ function make_learner(args...; kw...)
             push!(strats, ConvergenceFunction(v))
         end
     end
-    MasterLearner(args..., strats...)
+    MetaLearner(args..., strats...)
 end
 
-# add to an existing master
-function make_learner(master::MasterLearner, args...; kw...)
-    make_learner(master.managers..., args...; kw...)
+# add to an existing meta
+function make_learner(meta::MetaLearner, args...; kw...)
+    make_learner(meta.managers..., args...; kw...)
 end
 
 # ---------------------------------------------------------------------------------
@@ -127,18 +127,18 @@ end
 """
 A Stochastic Gradient Descent learner, with LearningRate lr and ParamUpdater updater (SGD, Adam, etc)
 """
-immutable GradientDescent{LR <: LearningRate, PU <: ParamUpdater} <: LearningStrategy
+immutable GradientLearner{LR <: LearningRate, PU <: ParamUpdater} <: LearningStrategy
     lr::LR
     updater::PU
 end
-GradientDescent(lr::LearningRate = FixedLR(1e-1), updater::ParamUpdater = RMSProp()) = GradientDescent(lr, updater)
-GradientDescent(updater::ParamUpdater, lr::LearningRate = FixedLR(1e-3)) = GradientDescent(lr, updater)
-GradientDescent(lr::Number, updater::ParamUpdater = RMSProp()) = GradientDescent(FixedLR(lr), updater)
+GradientLearner(lr::LearningRate = FixedLR(1e-1), updater::ParamUpdater = RMSProp()) = GradientLearner(lr, updater)
+GradientLearner(updater::ParamUpdater, lr::LearningRate = FixedLR(1e-3)) = GradientLearner(lr, updater)
+GradientLearner(lr::Number, updater::ParamUpdater = RMSProp()) = GradientLearner(FixedLR(lr), updater)
 
-pre_hook(strat::GradientDescent, model) = init(strat.updater, model)
+pre_hook(strat::GradientLearner, model) = init(strat.updater, model)
 
 # minibatch learning.  update with average gradient
-function learn!(model, strat::GradientDescent, subset::AbstractSubset)
+function learn!(model, strat::GradientLearner, subset::AbstractSubset)
     θ = params(model)
     ∇ = grad(model)
     before_grad_calc(θ, strat.updater, ∇)
@@ -162,7 +162,7 @@ function learn!(model, strat::GradientDescent, subset::AbstractSubset)
 end
 
 # stochastic learning.  update with a single gradient
-function learn!(model, strat::GradientDescent, obs::Tuple)
+function learn!(model, strat::GradientLearner, obs::Tuple)
     input, target = obs
 
     # forward and backward passes for this datapoint

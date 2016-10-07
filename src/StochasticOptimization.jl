@@ -4,19 +4,18 @@ module StochasticOptimization
 
 using Reexport
 @reexport using LearnBase
-@reexport using ObjectiveFunctions
 using Parameters
 
 import LearnBase: value, learn!, update!
 
 export
     LearningStrategy,
-    MasterLearner,
+    MetaLearner,
     MaxIter,
     TimeLimit,
     ConvergenceFunction,
     IterFunction,
-    GradientDescent,
+    GradientLearner,
     make_learner,
 
     # forever,

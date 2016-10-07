@@ -8,11 +8,12 @@ Utilizing the JuliaML ecosystem, StochasticOptimization is a framework for itera
 using StochasticOptimization
 using ObjectiveFunctions
 using CatViews
+using MLDataUtils
 nin, nout = 10, 1
 
 # Build our objective. Note this is LASSO regression.
 t = Affine(nin,nout)
-l = L2DistLoss()
+l = LossTransform(L2DistLoss(), nin)
 p = L1Penalty(1e-8)
 obj = RegularizedObjective(t, l, p)
 
@@ -25,7 +26,7 @@ noise = 0.1rand(nout, τ)
 targets = w * inputs + repmat(b, 1, τ) + noise
 
 # Our core learning strategy... uses Adamax with a fixed learning rate
-strat = GradientDescent(FixedLR(5e-3), Adamax())
+strat = GradientLearner(FixedLR(5e-3), Adamax())
 
 # Create a view of w and b which looks like a single vector
 θ = CatView(w,b)
@@ -44,8 +45,8 @@ strat = GradientDescent(FixedLR(5e-3), Adamax())
     false
 end)
 
-# The MasterLearner has a bunch of specialized sub-learners.
-learner = MasterLearner(
+# The MetaLearner has a bunch of specialized sub-learners.
+learner = MetaLearner(
     strat,
     MaxIter(5000),
     θ_converge
