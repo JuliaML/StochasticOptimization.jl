@@ -1,6 +1,6 @@
 
 
-# ---------------------------------------------------------------------------------
+# -------------------------------------------------------------
 
 # fallbacks don't do anything
 pre_hook(strat::LearningStrategy, model)      = return
@@ -9,7 +9,7 @@ post_hook(strat::LearningStrategy, model)     = return
 finished(strat::LearningStrategy, model, i)      = false
 learn!(model, strat::LearningStrategy, data)  = return
 
-# ---------------------------------------------------------------------------------
+# -------------------------------------------------------------
 
 # Meta-learner that can compose sub-managers of optimization components in a type-stable way.
 # A sub-manager is any LearningStrategy, and may implement any subset of callbacks.
@@ -58,7 +58,7 @@ end
 # end
 
 
-# ---------------------------------------------------------------------------------
+# -------------------------------------------------------------
 
 "A sub-strategy to stop the learning after a fixed number of iterations (maxiter)"
 immutable MaxIter <: LearningStrategy
@@ -67,7 +67,7 @@ end
 MaxIter() = MaxIter(100)
 finished(strat::MaxIter, model, i) = i >= strat.maxiter
 
-# ---------------------------------------------------------------------------------
+# -------------------------------------------------------------
 
 "Stop iterating after a pre-determined amount of time."
 type TimeLimit <: LearningStrategy
@@ -84,7 +84,7 @@ function finished(strat::TimeLimit, model, i)
     stop
 end
 
-# ---------------------------------------------------------------------------------
+# -------------------------------------------------------------
 
 "A sub-strategy to stop learning when the associated function returns true."
 immutable ConvergenceFunction{F<:Function} <: LearningStrategy
@@ -92,7 +92,7 @@ immutable ConvergenceFunction{F<:Function} <: LearningStrategy
 end
 finished(strat::ConvergenceFunction, model, i) = strat.f(model, i)
 
-# ---------------------------------------------------------------------------------
+# -------------------------------------------------------------
 
 
 "A sub-strategy to do something each iteration."
@@ -101,7 +101,7 @@ immutable IterFunction{F<:Function} <: LearningStrategy
 end
 iter_hook(strat::IterFunction, model, i) = strat.f(model, i)
 
-# ---------------------------------------------------------------------------------
+# -------------------------------------------------------------
 
 function make_learner(args...; kw...)
     strats = []
@@ -122,57 +122,105 @@ function make_learner(meta::MetaLearner, args...; kw...)
     make_learner(meta.managers..., args...; kw...)
 end
 
-# ---------------------------------------------------------------------------------
+# -------------------------------------------------------------
+
+# abstract SearchDirection
+
+# immutable NoUpdater <: SearchDirection end
+# state!(model, su::NoUpdater, obs...) = return
+
+# immutable BackpropUpdater <: LearningStrategy end
+# function state!(model, su::BackpropUpdater, target, input)
+#     transform!(model, target, input)
+#     grad!(model)
+#     return
+# end
+
+# -------------------------------------------------------------
 
 """
-A Stochastic Gradient Descent learner, with LearningRate lr and ParamUpdater updater (SGD, Adam, etc)
+An abstraction that knows how to update a model and compute a search
+direction (gradient estimate).
 """
-immutable GradientLearner{LR <: LearningRate, PU <: ParamUpdater} <: LearningStrategy
-    lr::LR
-    updater::PU
+abstract SearchDirection <: LearningStrategy
+
+type GradientAverager <: SearchDirection
+    ∇avg::Vector{Float64}
+    GradientAverager() = new()
 end
-GradientLearner(lr::LearningRate = FixedLR(1e-1), updater::ParamUpdater = RMSProp()) = GradientLearner(lr, updater)
-GradientLearner(updater::ParamUpdater, lr::LearningRate = FixedLR(1e-3)) = GradientLearner(lr, updater)
-GradientLearner(lr::Number, updater::ParamUpdater = RMSProp()) = GradientLearner(FixedLR(lr), updater)
 
-pre_hook(strat::GradientLearner, model) = init(strat.updater, model)
+function init(ga::GradientAverager, model)
+    ga.∇avg = zeros(length(grad(model)))
+end
 
-# minibatch learning.  update with average gradient
-function learn!(model, strat::GradientLearner, subset::AbstractSubset)
-    θ = params(model)
-    ∇ = grad(model)
-    before_grad_calc(θ, strat.updater, ∇)
-    
-    ∇avg = zeros(θ)
+# for a single observation, just return ∇
+function search_direction(model, ga::GradientAverager, obs::Tuple)
+    update!(model, obs)
+    grad(model)
+end
+
+# for a minibatch, compute the average gradient
+function search_direction(model, ga::GradientAverager, subset::AbstractSubset)
+    fill!(ga.∇avg, 0.0)
     scalar = 1 / nobs(subset)
-    for (input,target) in subset
-        # forward and backward passes for this datapoint
-        transform!(model, target, input)
-        grad!(model)
+    ∇ = grad(model)
+    for obs in subset
+        update!(model, obs)
 
-        # add to the total param change for this strat/gradient
-        for i in 1:length(∇)
-            ∇avg[i] += ∇[i] * scalar
+        # add to the total param change for this gl/gradient
+        @simd for i in 1:length(∇)
+            @inbounds ga.∇avg[i] += ∇[i] * scalar
         end
     end
-
-    # update the params using the average gradient
-    lr = value(strat.lr)
-    update!(θ, strat.updater, ∇avg, lr)
+    ga.∇avg
 end
 
-# stochastic learning.  update with a single gradient
-function learn!(model, strat::GradientLearner, obs::Tuple)
-    input, target = obs
+# -------------------------------------------------------------
 
-    # forward and backward passes for this datapoint
+"""
+A sub-learner which can update model parameters using a search direction (which might be an estimate
+    of the gradient), with LearningRate lr and ParamUpdater pu (SGD, Adam, etc).
+
+Note: we might update the model's internal state while computing the SearchDirection.
+"""
+immutable GradientLearner{LR <: LearningRate, PU <: ParamUpdater, SD <: SearchDirection} <: LearningStrategy
+    lr::LR
+    pu::PU
+    sd::SD
+end
+
+function GradientLearner(lr::LearningRate = FixedLR(1e-1),
+                         pu::ParamUpdater = RMSProp(),
+                         sd::SearchDirection = GradientAverager())
+    GradientLearner(lr, pu, sd)
+end
+# function GradientLearner(pu::ParamUpdater,
+#                          lr::LearningRate = FixedLR(1e-3),
+#                          sd::SearchDirection = GradientAverager())
+#     GradientLearner(lr, pu, sd)
+# end
+function GradientLearner(lr::Number,
+                         pu::ParamUpdater = RMSProp(),
+                         sd::SearchDirection = GradientAverager())
+    GradientLearner(FixedLR(lr), pu, sd)
+end
+
+function pre_hook(gl::GradientLearner, model)
+    init(gl.pu, model)
+    init(gl.sd, model)
+end
+
+# one iteration update
+function learn!(model, gl::GradientLearner, data)
     θ = params(model)
     ∇ = grad(model)
-    before_grad_calc(θ, strat.updater, ∇)
-    transform!(model, target, input)
-    grad!(model)
 
-    # update the params using the gradient
-    lr = value(strat.lr)
-    update!(θ, strat.updater, ∇, lr)
+    # optional setup before iteration update
+    before_grad_calc(θ, gl.pu, ∇)
+
+    # get this iterations search direction (gradient estimate)
+    sd = search_direction(model, gl.sd, data)
+
+    # update the params using the search direction
+    update!(θ, gl.pu, sd, value(gl.lr))
 end
