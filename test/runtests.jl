@@ -147,7 +147,7 @@ using Plots; unicodeplots(show=true,leg=false)
     srand(1)
     n = 2
     t = rosenbrock_transform(n)
-    obj = objective(t, L2DistLoss())
+    obj = objective(t, NoLoss())
 
     # random starting values
     θ = params(t)
@@ -157,34 +157,35 @@ using Plots; unicodeplots(show=true,leg=false)
     # build a MetaLearner to use RMSProp w/ fixed learning rate,
     # setting max iterations, a custom convergence check, and a
     # custom iteration callback to collect data to plot
-    converged = (m,i) -> output_value(m)[1] < 1e-6
+    converged = (m,i) -> totalcost(m) < 1e-6
     maxiter = 50000
 
     # this problem has no input (we're learning the params only),
     # and we know the minimum is zero, so we forever pull from this
     # fixed (inputs,targets) pair
-    data = zeros(0,1),zeros(1,1)
+    # data = zeros(0,1),zeros(1,1)
 
     # test the choices of ParamUpdaters
     for (T, lr) in [
-                    (SGD, 1e-4),
+                    (SGD, 5e-4),
                     (Adagrad, 1e-0),
                     (Adadelta, 1e-3),
                     (Adam, 1e-2),
-                    (Adamax, 1e-3),
-                    (RMSProp, 1e-3),
+                    (Adamax, 1e-2),
+                    (RMSProp, 1e-2),
                     ]
         @show T,lr
         learner = make_learner(
             GradientLearner(lr, T()),
             # TimeLimit(10),
+            # ShowStatus(1000),
             maxiter = maxiter,
             converged = converged
         )
 
         # learn forever (our maxiter and converge sub-learners will stop us)
         θ[:] = startvals
-        learn!(obj, learner, infinite_obs(data))
+        learn!(obj, learner) #, infinite_obs(data))
 
         tc = totalcost(obj)
         @show tc
@@ -209,7 +210,7 @@ using Plots; unicodeplots(show=true,leg=false)
 
     # learn forever (our maxiter and converge sub-learners will stop us)
     θ[:] = startvals
-    learn!(obj, learner, infinite_batches(data))
+    learn!(obj, learner) #, infinite_batches(data))
 
     tc = totalcost(obj)
     @show tc
@@ -245,21 +246,8 @@ end
         GradientLearner(FixedLR(5e-3), Adamax()),
         ShowStatus(40),
         tracer,
+        ConvergedTo(params, θ, tol=0.1, every=20),
         maxiter=5000,
-        converged = (model,i) -> begin
-            if mod1(i,100) == 100
-                normw = norm(θ - params(model))
-                @show i,normw
-                if normw < 0.1
-                    info("Converged after $i iterations: $normw")
-                    return true
-                end
-            end
-            false
-        end,
-        # oniter = (model, i) -> begin
-        #     push!(normvals, norm(θ - params(model)))
-        # end
     )
 
     learn!(obj, learner, infinite_batches(inputs, targets, size=20))

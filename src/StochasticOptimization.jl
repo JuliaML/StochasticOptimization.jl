@@ -16,6 +16,8 @@ export
     IterFunction,
     ShowStatus,
     Tracer,
+    Converged,
+    ConvergedTo,
     GradientLearner,
     make_learner,
 
