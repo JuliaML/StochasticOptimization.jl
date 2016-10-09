@@ -157,7 +157,7 @@ using Plots; unicodeplots(show=true,leg=false)
     # build a MetaLearner to use RMSProp w/ fixed learning rate,
     # setting max iterations, a custom convergence check, and a
     # custom iteration callback to collect data to plot
-    converged = (m,i) -> output_value(m)[1] < 1e-8
+    converged = (m,i) -> output_value(m)[1] < 1e-6
     maxiter = 50000
 
     # this problem has no input (we're learning the params only),
@@ -243,7 +243,7 @@ end
     learner = make_learner(
         GradientLearner(FixedLR(5e-3), Adamax()),
         maxiter=5000,
-        converge = (model,i) -> begin
+        converged = (model,i) -> begin
             if mod1(i,100) == 100
                 normw = norm(θ - params(model))
                 @show i,normw
