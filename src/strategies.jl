@@ -86,9 +86,26 @@ end
 
 # -------------------------------------------------------------
 
+"Print out a summary of the current learning"
+type ShowStatus <: LearningStrategy
+    every::Int
+    f::Function
+end
+ShowStatus(every::Int = 1) = ShowStatus(every, (model, i) -> "Iteration $i: $(params(model))")
+
+pre_hook(strat::ShowStatus, model) = iter_hook(strat, model, 0)
+function iter_hook(strat::ShowStatus, model, i)
+    if mod1(i, strat.every) == strat.every
+        println(strat.f(model, i))
+    end
+    return
+end
+
+# -------------------------------------------------------------
+
 "A sub-strategy to stop learning when the associated function returns true."
-immutable ConvergenceFunction{F<:Function} <: LearningStrategy
-    f::F
+immutable ConvergenceFunction <: LearningStrategy
+    f::Function
 end
 finished(strat::ConvergenceFunction, model, i) = strat.f(model, i)
 
@@ -96,10 +113,27 @@ finished(strat::ConvergenceFunction, model, i) = strat.f(model, i)
 
 
 "A sub-strategy to do something each iteration."
-immutable IterFunction{F<:Function} <: LearningStrategy
-    f::F
+immutable IterFunction <: LearningStrategy
+    f::Function
 end
 iter_hook(strat::IterFunction, model, i) = strat.f(model, i)
+
+# -------------------------------------------------------------
+
+"Store something every ith iteration"
+type Tracer{S} <: LearningStrategy
+    every::Int
+    f::Function
+    storage::Vector{S}
+end
+Tracer{S}(::Type{S}, f::Function, every::Int = 1) = Tracer(every, f, S[])
+function iter_hook(strat::Tracer, model, i)
+    if mod1(i, strat.every) == strat.every
+        push!(strat.storage, strat.f(model, i))
+    end
+    return
+end
+
 
 # -------------------------------------------------------------
 

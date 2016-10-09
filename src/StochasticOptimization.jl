@@ -14,6 +14,8 @@ export
     TimeLimit,
     ConvergenceFunction,
     IterFunction,
+    ShowStatus,
+    Tracer,
     GradientLearner,
     make_learner,
 

@@ -237,11 +237,14 @@ end
     targets = w * inputs + repmat(b, 1, τ) + 0.1randn(nout, τ)
 
     # add norms to a trace vector
-    normvals = zeros(0)
+    # normvals = zeros(0)
+    tracer = Tracer(Float64, (model,i) -> norm(θ - params(model)))
 
     # the MetaLearner have a bunch of specialized sub-learners
     learner = make_learner(
         GradientLearner(FixedLR(5e-3), Adamax()),
+        ShowStatus(40),
+        tracer,
         maxiter=5000,
         converged = (model,i) -> begin
             if mod1(i,100) == 100
@@ -254,9 +257,9 @@ end
             end
             false
         end,
-        oniter = (model, i) -> begin
-            push!(normvals, norm(θ - params(model)))
-        end
+        # oniter = (model, i) -> begin
+        #     push!(normvals, norm(θ - params(model)))
+        # end
     )
 
     learn!(obj, learner, infinite_batches(inputs, targets, size=20))
@@ -264,7 +267,7 @@ end
     # some summary output:
 
     println()
-    plot(normvals, title = "‖θₜᵣᵤₑ - θ‖²", xguide="Iteration")
+    plot(tracer.storage, title = "‖θₜᵣᵤₑ - θ‖²", xguide="Iteration")
 
     # scatter predicted output vs ground truth... should be diagonal line
     est_w, est_b = t.params.views
