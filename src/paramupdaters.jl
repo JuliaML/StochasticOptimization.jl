@@ -22,7 +22,7 @@ end
 
 # add momentum into θ, and reset last_Δ
 function before_grad_calc(θ::AbstractVector, updater::SGD, ∇::AbstractVector)
-    for (i,k) in zip(eachindex(θ), eachindex(updater.last_Δ))
+    @inbounds for (i,k) in zip(eachindex(θ), eachindex(updater.last_Δ))
         momchg = updater.mom * updater.last_Δ[k]
         updater.last_Δ[k] = momchg
         θ[i] += momchg
@@ -31,7 +31,7 @@ end
 
 #
 function update!(θ::AbstractVector, updater::SGD, ∇::AbstractVector, lr::Number)
-    for (i,j,k) in zip(eachindex(θ), eachindex(∇), eachindex(updater.last_Δ))
+    @inbounds for (i,j,k) in zip(eachindex(θ), eachindex(∇), eachindex(updater.last_Δ))
         chg = -lr * ∇[j]
         θ[i] += chg
         updater.last_Δ[k] += chg
@@ -55,7 +55,7 @@ function init(updater::Adagrad, model)
 end
 
 function update!(θ::AbstractVector, updater::Adagrad, ∇::AbstractVector, lr::Number)
-    for (i,j,k) in zip(eachindex(θ), eachindex(∇), eachindex(updater.G))
+    @inbounds for (i,j,k) in zip(eachindex(θ), eachindex(∇), eachindex(updater.G))
         updater.G[k] += ∇[j]^2
         θ[i] -= lr * ∇[j] / sqrt(updater.ϵ + updater.G[k])
     end
@@ -90,7 +90,7 @@ function update!{T}(θ::AbstractVector, updater::Adadelta{T}, ∇::AbstractVecto
     ρ = updater.ρ
     dm = updater.dmean
     Gm = updater.Gmean
-    for i=1:length(θ)
+    @inbounds for i=1:length(θ)
         # average g²
         Gm[i] = ρ * Gm[i] + (one(T) - ρ) * ∇[i]^2
 
@@ -143,7 +143,7 @@ function update!{T}(θ::AbstractVector, updater::Adam{T}, ∇::AbstractVector, l
     v = updater.v
     ρ₁ᵗ = updater.ρ₁ᵗ
     ρ₂ᵗ = updater.ρ₂ᵗ
-    for i=1:length(θ)
+    @inbounds for i=1:length(θ)
         m[i] = ρ₁ * m[i] + (one(T) - ρ₁) * ∇[i]
         v[i] = ρ₂ * v[i] + (one(T) - ρ₂) * ∇[i]^2
         ρ₁ᵗ[i] *= ρ₁
@@ -184,7 +184,7 @@ function update!{T}(θ::AbstractVector, updater::Adamax{T}, ∇::AbstractVector,
     m = updater.m
     u = updater.u
     ρ₁ᵗ = updater.ρ₁ᵗ
-    for i=1:length(θ)
+    @inbounds for i=1:length(θ)
         m[i] = ρ₁ * m[i] + (one(T) - ρ₁) * ∇[i]
         u[i] = max(ρ₂ * u[i], abs(∇[i]))
         ρ₁ᵗ[i] *= ρ₁
@@ -213,7 +213,7 @@ end
 function update!{T}(θ::AbstractVector, updater::RMSProp{T}, ∇::AbstractVector, lr::Number)
     γ = updater.γ
     g = updater.g
-    for i=1:length(θ)
+    @inbounds for i=1:length(θ)
         g[i] = γ * g[i] + (one(T) - γ) * ∇[i]^2
         θ[i] -= lr * ∇[i] / sqrt(g[i] + 1e-10)
     end

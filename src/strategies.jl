@@ -42,6 +42,11 @@ function learn!(model, meta::MetaLearner, data)
     post_hook(meta, model)
 end
 
+# we can optionally learn without input data... good for minimizing functions
+function learn!(model, meta::MetaLearner)
+    learn!(model, meta, repeated(nothing))
+end
+
 # TODO: can we instead use generated functions for each MetaLearner callback so that they are ONLY called for
 #   those methods which the manager explicitly implements??  We'd need to have a type-stable way
 #   of checking whether that manager implements that method.
@@ -86,20 +91,98 @@ end
 
 # -------------------------------------------------------------
 
+"Print out a summary of the current learning"
+type ShowStatus <: LearningStrategy
+    every::Int
+    f::Function
+end
+ShowStatus(every::Int = 1) = ShowStatus(every, (model, i) -> "Iteration $i: $(params(model))")
+
+pre_hook(strat::ShowStatus, model) = iter_hook(strat, model, 0)
+function iter_hook(strat::ShowStatus, model, i)
+    if mod1(i, strat.every) == strat.every
+        println(strat.f(model, i))
+    end
+    return
+end
+
+# -------------------------------------------------------------
+
 "A sub-strategy to stop learning when the associated function returns true."
-immutable ConvergenceFunction{F<:Function} <: LearningStrategy
-    f::F
+immutable ConvergenceFunction <: LearningStrategy
+    f::Function
 end
 finished(strat::ConvergenceFunction, model, i) = strat.f(model, i)
 
 # -------------------------------------------------------------
 
+"Finished when `‖f(model) - lastf‖ ≦ tol`"
+type Converged <: LearningStrategy
+    f::Function   # f(model)
+    tol::Float64  # normdiff tolerance
+    every::Int    # only check every ith iteration
+    lastval::Vector{Float64}
+    Converged(f::Function; tol::Number = 1e-6, every::Int = 1) = new(f, tol, every)
+end
+pre_hook(strat::Converged, model) = (strat.lastval = zeros(strat.f(model)); return)
+function finished(strat::Converged, model, i)
+    val = strat.f(model)
+    if norm(val - strat.lastval) <= strat.tol
+        info("Converged after $i iterations: $val")
+        true
+    else
+        copy!(strat.lastval, val)
+        false
+    end
+end
+
+# -------------------------------------------------------------
+
+"Finished when `‖f(model) - goal‖ ≦ tol`"
+type ConvergedTo{V} <: LearningStrategy
+    f::Function   # f(model)
+    tol::Float64  # normdiff tolerance
+    goal::V       # goal value
+    every::Int    # only check every ith iteration
+end
+function ConvergedTo(f::Function, goal; tol::Number = 1e-6, every::Int = 1)
+    ConvergedTo(f, tol, goal, every)
+end
+function finished(strat::ConvergedTo, model, i)
+    val = strat.f(model)
+    if norm(val - strat.goal) <= strat.tol
+        info("Converged after $i iterations: $val")
+        true
+    else
+        false
+    end
+end
+
+# -------------------------------------------------------------
+
 
 "A sub-strategy to do something each iteration."
-immutable IterFunction{F<:Function} <: LearningStrategy
-    f::F
+immutable IterFunction <: LearningStrategy
+    f::Function
 end
 iter_hook(strat::IterFunction, model, i) = strat.f(model, i)
+
+# -------------------------------------------------------------
+
+"Store something every ith iteration"
+type Tracer{S} <: LearningStrategy
+    every::Int
+    f::Function
+    storage::Vector{S}
+end
+Tracer{S}(::Type{S}, f::Function, every::Int = 1) = Tracer(every, f, S[])
+function iter_hook(strat::Tracer, model, i)
+    if mod1(i, strat.every) == strat.every
+        push!(strat.storage, strat.f(model, i))
+    end
+    return
+end
+
 
 # -------------------------------------------------------------
 
@@ -154,7 +237,7 @@ function init(ga::GradientAverager, model)
 end
 
 # for a single observation, just return ∇
-function search_direction(model, ga::GradientAverager, obs::Tuple)
+function search_direction(model, ga::GradientAverager, obs)
     update!(model, obs)
     grad(model)
 end

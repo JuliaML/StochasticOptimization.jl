@@ -146,55 +146,58 @@ using Plots; unicodeplots(show=true,leg=false)
 
     srand(1)
     n = 2
-    t = rosenbrock_transform(n)
-    obj = objective(t, L2DistLoss())
+    t = tfunc(rosenbrock, n, rosenbrock_gradient)
+    @show t
+    # t = rosenbrock_transform(n)
+    # obj = objective(t, NoLoss())
 
     # random starting values
     θ = params(t)
     startvals = 8rand(n)-4
-    @show startvals
+    @show θ startvals
 
     # build a MetaLearner to use RMSProp w/ fixed learning rate,
     # setting max iterations, a custom convergence check, and a
     # custom iteration callback to collect data to plot
-    converged = (m,i) -> output_value(m)[1] < 1e-8
+    converged = (m,i) -> totalcost(m) < 1e-6
     maxiter = 50000
 
     # this problem has no input (we're learning the params only),
     # and we know the minimum is zero, so we forever pull from this
     # fixed (inputs,targets) pair
-    data = zeros(0,1),zeros(1,1)
+    # data = zeros(0,1),zeros(1,1)
 
     # test the choices of ParamUpdaters
     for (T, lr) in [
-                    (SGD, 1e-4),
+                    (SGD, 5e-4),
                     (Adagrad, 1e-0),
                     (Adadelta, 1e-3),
                     (Adam, 1e-2),
-                    (Adamax, 1e-3),
+                    (Adamax, 1e-2),
                     (RMSProp, 1e-3),
                     ]
         @show T,lr
         learner = make_learner(
             GradientLearner(lr, T()),
             # TimeLimit(10),
+            # ShowStatus(1000),
             maxiter = maxiter,
             converged = converged
         )
 
         # learn forever (our maxiter and converge sub-learners will stop us)
         θ[:] = startvals
-        learn!(obj, learner, infinite_obs(data))
+        learn!(t, learner) #, infinite_obs(data))
 
-        tc = totalcost(obj)
+        tc = totalcost(t)
         @show tc
-        @test 0 < tc < 1e-4
+        @test 0 < tc < 1e-3
     end
 
     # rerun while tracking x/y
     x,y = zeros(0),zeros(0)
     learner = make_learner(
-        GradientLearner(FixedLR(1e-3), RMSProp()),
+        GradientLearner(1e-1, Adamax()),
         maxiter = 50000,
         converged = converged,
         oniter = (m,i) -> begin
@@ -209,11 +212,11 @@ using Plots; unicodeplots(show=true,leg=false)
 
     # learn forever (our maxiter and converge sub-learners will stop us)
     θ[:] = startvals
-    learn!(obj, learner, infinite_batches(data))
+    learn!(t, learner) #, infinite_batches(data))
 
-    tc = totalcost(obj)
+    tc = totalcost(t)
     @show tc
-    @test 0 < tc < 1e-4
+    @test 0 < tc < 1e-3
 
     # plot our path to solution
     plot(x,y, ann=[(θ..., text("$θ", :left))])
@@ -237,26 +240,16 @@ end
     targets = w * inputs + repmat(b, 1, τ) + 0.1randn(nout, τ)
 
     # add norms to a trace vector
-    normvals = zeros(0)
+    # normvals = zeros(0)
+    tracer = Tracer(Float64, (model,i) -> norm(θ - params(model)))
 
     # the MetaLearner have a bunch of specialized sub-learners
     learner = make_learner(
         GradientLearner(FixedLR(5e-3), Adamax()),
+        ShowStatus(40),
+        tracer,
+        ConvergedTo(params, θ, tol=0.1, every=20),
         maxiter=5000,
-        converge = (model,i) -> begin
-            if mod1(i,100) == 100
-                normw = norm(θ - params(model))
-                @show i,normw
-                if normw < 0.1
-                    info("Converged after $i iterations: $normw")
-                    return true
-                end
-            end
-            false
-        end,
-        oniter = (model, i) -> begin
-            push!(normvals, norm(θ - params(model)))
-        end
     )
 
     learn!(obj, learner, infinite_batches(inputs, targets, size=20))
@@ -264,7 +257,7 @@ end
     # some summary output:
 
     println()
-    plot(normvals, title = "‖θₜᵣᵤₑ - θ‖²", xguide="Iteration")
+    plot(tracer.storage, title = "‖θₜᵣᵤₑ - θ‖²", xguide="Iteration")
 
     # scatter predicted output vs ground truth... should be diagonal line
     est_w, est_b = t.params.views

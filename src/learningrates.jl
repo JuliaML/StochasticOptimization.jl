@@ -1,4 +1,7 @@
 
+# TODO: maybe we should get rid of the LearningRate abstraction, make it a number,
+#   and then allow sub-learner(s) in the GradientLearner to update the learning rate?
+
 immutable FixedLR <: LearningRate
     lr::Float64
 end
