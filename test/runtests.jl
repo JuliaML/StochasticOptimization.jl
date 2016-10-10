@@ -146,13 +146,15 @@ using Plots; unicodeplots(show=true,leg=false)
 
     srand(1)
     n = 2
-    t = rosenbrock_transform(n)
-    obj = objective(t, NoLoss())
+    t = tfunc(rosenbrock, n, rosenbrock_gradient)
+    @show t
+    # t = rosenbrock_transform(n)
+    # obj = objective(t, NoLoss())
 
     # random starting values
     θ = params(t)
     startvals = 8rand(n)-4
-    @show startvals
+    @show θ startvals
 
     # build a MetaLearner to use RMSProp w/ fixed learning rate,
     # setting max iterations, a custom convergence check, and a
@@ -172,7 +174,7 @@ using Plots; unicodeplots(show=true,leg=false)
                     (Adadelta, 1e-3),
                     (Adam, 1e-2),
                     (Adamax, 1e-2),
-                    (RMSProp, 1e-2),
+                    (RMSProp, 1e-3),
                     ]
         @show T,lr
         learner = make_learner(
@@ -185,17 +187,17 @@ using Plots; unicodeplots(show=true,leg=false)
 
         # learn forever (our maxiter and converge sub-learners will stop us)
         θ[:] = startvals
-        learn!(obj, learner) #, infinite_obs(data))
+        learn!(t, learner) #, infinite_obs(data))
 
-        tc = totalcost(obj)
+        tc = totalcost(t)
         @show tc
-        @test 0 < tc < 1e-4
+        @test 0 < tc < 1e-3
     end
 
     # rerun while tracking x/y
     x,y = zeros(0),zeros(0)
     learner = make_learner(
-        GradientLearner(FixedLR(1e-3), RMSProp()),
+        GradientLearner(1e-1, Adamax()),
         maxiter = 50000,
         converged = converged,
         oniter = (m,i) -> begin
@@ -210,11 +212,11 @@ using Plots; unicodeplots(show=true,leg=false)
 
     # learn forever (our maxiter and converge sub-learners will stop us)
     θ[:] = startvals
-    learn!(obj, learner) #, infinite_batches(data))
+    learn!(t, learner) #, infinite_batches(data))
 
-    tc = totalcost(obj)
+    tc = totalcost(t)
     @show tc
-    @test 0 < tc < 1e-4
+    @test 0 < tc < 1e-3
 
     # plot our path to solution
     plot(x,y, ann=[(θ..., text("$θ", :left))])
