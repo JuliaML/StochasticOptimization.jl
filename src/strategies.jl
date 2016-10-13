@@ -164,8 +164,15 @@ end
 "A sub-strategy to do something each iteration."
 immutable IterFunction <: LearningStrategy
     f::Function
+    every::Int
 end
-iter_hook(strat::IterFunction, model, i) = strat.f(model, i)
+IterFunction(f::Function; every::Int = 1) = IterFunction(f, every)
+function iter_hook(strat::IterFunction, model, i)
+    if mod1(i, strat.every) == strat.every
+        strat.f(model, i)
+    end
+    return
+end
 
 # -------------------------------------------------------------
 
