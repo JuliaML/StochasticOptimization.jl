@@ -26,14 +26,13 @@ iter_hook(meta::MetaLearner, model, i) = foreach(mgr -> iter_hook(mgr, model, i)
 finished(meta::MetaLearner,  model, i) = any(mgr     -> finished(mgr, model, i),   meta.managers)
 post_hook(meta::MetaLearner, model)    = foreach(mgr -> post_hook(mgr, model),     meta.managers)
 
-# This is the core iteration loop.  Loop through batches checking for early stopping after each subset
+# This is the core iteration loop.  Iterate through data, checking for
+# early stopping after each iteration.
 function learn!(model, meta::MetaLearner, data)
     pre_hook(meta, model)
-    for (i, obs) in enumerate(data)
-        # update the params for this subset
-        # learn!(model, meta, subset)
+    for (i, item) in enumerate(data)
         for mgr in meta.managers
-            learn!(model, mgr, obs)
+            learn!(model, mgr, isbatches(data) ? eachobs(item) : item)
         end
 
         iter_hook(meta, model, i)
@@ -44,7 +43,7 @@ end
 
 # we can optionally learn without input data... good for minimizing functions
 function learn!(model, meta::MetaLearner)
-    learn!(model, meta, repeated(nothing))
+    learn!(model, meta, infinite_obs([nothing]))
 end
 
 # TODO: can we instead use generated functions for each MetaLearner callback so that they are ONLY called for
@@ -250,11 +249,11 @@ function search_direction(model, ga::GradientAverager, obs)
 end
 
 # for a minibatch, compute the average gradient
-function search_direction(model, ga::GradientAverager, subset::AbstractSubset)
+function search_direction(model, ga::GradientAverager, batch::DataIterator)
     fill!(ga.∇avg, 0.0)
-    scalar = 1 / nobs(subset)
+    scalar = 1 / nobs(batch)
     ∇ = grad(model)
-    for obs in subset
+    for obs in batch
         update!(model, obs)
 
         # add to the total param change for this gl/gradient

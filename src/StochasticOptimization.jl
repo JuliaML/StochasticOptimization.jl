@@ -4,6 +4,7 @@ module StochasticOptimization
 
 using Reexport
 @reexport using LearnBase
+using MLDataUtils
 
 import LearnBase: value, learn!, update!
 
@@ -38,7 +39,7 @@ export
     Adamax,
     RMSProp
 
-include("datasubsets.jl")
+# include("datasubsets.jl")
 
 "Enacts a strategy to adjust the learning rate"
 abstract LearningRate
