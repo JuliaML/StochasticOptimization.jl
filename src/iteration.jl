@@ -173,12 +173,9 @@ end
 EachObs{S}(source::S) = EachObs{S, obstype(source)}(source)
 const each_obs = EachObs
 
-# Base.length(itr::EachObs) = nobs(itr.source)
 Base.start(itr::EachObs) = 1
 Base.done(itr::EachObs, i) = i > length(itr)
 Base.next(itr::EachObs, i) = (getobs(itr.source, i), i+1)
-# Base.rand(itr::EachObs, dims::Integer...) = getobs(itr.source, rand(1:length(itr), dims...))
-# Base.collect(itr::EachObs) = collect(itr.source)
 
 # ----------------------------------------------------------------------------
 
@@ -197,16 +194,10 @@ const subset_obs = SubsetObs
 
 nobs(itr::SubsetObs) = length(itr.indices)
 all_indices(itr::SubsetObs) = itr.indices
-# getobs(itr::SubsetObs, idx) = getobs(itr.source, itr.indices[idx])
 
-# Base.length(itr::SubsetObs) = length(itr.indices)
-# Base.getindex(itr::SubsetObs, idx) = getobs(itr, idx)
-# Base.get(itr::SubsetObs) = getobs(itr, itr.indices)
 Base.start(itr::SubsetObs) = 1
 Base.done(itr::SubsetObs, i) = i > length(itr.indices)
 Base.next(itr::SubsetObs, i) = (getobs(itr.source, itr.indices[i]), i+1)
-# Base.rand(itr::SubsetObs, dims::Integer...) = getobs(itr.source, rand(itr.indices, dims...))
-# Base.collect(itr::SubsetObs) = collect(getobs(itr.source, itr.indices))
 
 # ----------------------------------------------------------------------------
 
@@ -229,8 +220,6 @@ Base.length(itr::InfiniteObs) = Inf
 Base.start(itr::InfiniteObs) = 1
 Base.done(itr::InfiniteObs, i) = false
 Base.next(itr::InfiniteObs, i) = (rand(itr), i+1)
-# Base.rand(itr::InfiniteObs, dims::Integer...) = getobs(itr.source, rand(1:nobs(source), dims...))
-# Base.collect(itr::InfiniteObs) = collect(itr.source)
 
 # ----------------------------------------------------------------------------
 
@@ -265,6 +254,22 @@ filtered_obs(f::Function, source) = SubsetObs(source, filter(f, 1:nobs(source)))
 filtered_obs(f::Function, s_1, s_2, s_rest...) = filtered_obs(f, (s_1, s_2, s_rest...))
 
 # ----------------------------------------------------------------------------
+
+
+immutable EachBatch{S,T} <: BatchIterator{T}
+    source::S
+    batchsize::Int
+    batchcount::Int
+end
+function EachBatch{S}(source::S; size=-1, count=-1)
+    EachBatch{S, obstype(source)}(source)
+end
+const each_obs = EachBatch
+
+Base.start(itr::EachBatch) = 1
+Base.done(itr::EachBatch, i) = i > length(itr)
+Base.next(itr::EachBatch, i) = (getobs(itr.source, i), i+1)
+
 # ----------------------------------------------------------------------------
 
 # "An explicit wrapper around an vector of SubsetObs"
