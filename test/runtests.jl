@@ -82,7 +82,7 @@ using Plots; unicodeplots(show=true,leg=false)
 
     # learn forever (our maxiter and converge sub-learners will stop us)
     θ[:] = startvals
-    learn!(t, learner) #, infinite_batches(data))
+    learn!(t, learner)
 
     tc = totalcost(t)
     @show tc

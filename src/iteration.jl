@@ -103,6 +103,7 @@ export
     each_batch,
     batches,
     infinite_batches,
+    split_obs,
     repeatedly,
     repeated,
     kfolds,
@@ -142,7 +143,13 @@ nobs(tup::Tuple{}) = 0
 getobs(tup::Tuple{}) = ()
 
 obstype(source) = typeof(getobs(source, 1))
+all_indices(source) = 1:nobs(source)
 
+Base.size(itr::DataIterator) = (length(itr),)
+
+# define the degenerate case so we can do infinite_obs(nothing) and get nothing forever
+nobs(::Void) = 1
+getobs(::Void, idx) = nothing
 
 # ----------------------------------------------------------------------------
 # ObsIterator
@@ -150,13 +157,11 @@ obstype(source) = typeof(getobs(source, 1))
 
 # default implementations
 nobs(itr::ObsIterator) = nobs(itr.source)
-all_indices(itr::ObsIterator) = 1:nobs(itr)
 getobs(itr::ObsIterator, idx) = getobs(itr.source, all_indices(itr)[idx])
 
 Base.rand(itr::ObsIterator, dims::Integer...) = getobs(itr.source, rand(all_indices(itr), dims...))
 Base.collect(itr::ObsIterator) = collect(getobs(itr.source, all_indices(itr)))
 Base.length(itr::ObsIterator) = length(all_indices(itr))
-Base.size(itr::ObsIterator) = size(all_indices(itr))
 Base.getindex(itr::ObsIterator, idx) = getobs(itr, idx)
 Base.get(itr::ObsIterator) = collect(itr)
 
@@ -261,7 +266,21 @@ filtered_obs(f::Function, s_1, s_2, s_rest...) = filtered_obs(f, (s_1, s_2, s_re
 # BatchIterator
 # ----------------------------------------------------------------------------
 
-default_batch_size(source) = clamp(div(nobs(source), 5), 1, 100)
+function default_batch_size(source)
+    clamp(div(nobs(source), 5), 1, 100)
+end
+
+function default_batch_indices(source)
+    batchsize = default_batch_size(source)
+    offset = 0
+    lst = []
+    while offset < n
+        sz = clamp(n - offset, 1, batchsize)
+        push!(lst, offset+1:offset+sz)
+        offset += sz
+    end
+    lst
+end
 
 """
 Helper function to compute sensible and compatible values for the
@@ -304,15 +323,58 @@ immutable EachBatch{S,T} <: BatchIterator{T}
     batchcount::Int
 end
 function EachBatch{S}(source::S; size=-1, count=-1)
-    EachBatch{S, obstype(source)}(source)
+    batchsize, batchcount = _compute_batch_settings(source, size, count)
+    EachBatch{S, obstype(source)}(source, batchsize, batchcount)
 end
-const each_obs = EachBatch
+const each_batch = EachBatch
 
-Base.start(itr::EachBatch) = 1
-Base.done(itr::EachBatch, i) = i > length(itr)
-Base.next(itr::EachBatch, i) = (getobs(itr.source, i), i+1)
+Base.start(itr::EachBatch) = 1:itr.batchsize
+Base.done(itr::EachBatch, i) = maximum(i) > nobs(itr.source) #i > itr.batchcount || (i * itr.batchsize)-1 > nobs(itr.source)
+Base.next(itr::EachBatch, i) = (subset_obs(itr.source, i), i+itr.batchsize)
+Base.getindex(itr::EachBatch, i::Integer) = subset_obs(itr.source, (1:itr.batchsize)+(i-1))
+Base.length(itr::EachBatch) = itr.batchcount
 
 # ----------------------------------------------------------------------------
+
+immutable Batches{S,T,I} <: BatchIterator{T}
+    source::S
+    batch_indices::I
+end
+# Batches(source; indices = default_batch_indices(source)) = Batches(source, indices)
+function Batches{S,I}(source::S, indices::I)
+    Batches{S, obstype(source), I}(source, indices)
+end
+batches(source; indices = default_batch_indices(source)) = Batches(source, indices)
+# const batches = Batches
+
+Base.start(itr::Batches) = 1
+Base.done(itr::Batches, i) = done(itr.batch_indices, i)
+function Base.next(itr::Batches, i)
+    v, nexti = next(itr.batch_indices,i)
+    subset_obs(source, v), nexti
+end
+Base.getindex(itr::Batches, i::Integer) = subset_obs(source, itr.batch_indices[i])
+Base.length(itr::Batches) = length(batch_indices)
+
+# ----------------------------------------------------------------------------
+
+immutable InfiniteBatches{S,T} <: BatchIterator{T}
+    source::S
+    batchsize::Int
+end
+function InfiniteBatches{S}(source::S; size = default_batch_size(source))
+    InfiniteBatches{S, obstype(source)}(source, size)
+end
+const infinite_batches = InfiniteBatches
+
+Base.length(itr::InfiniteBatches) = Inf
+Base.start(itr::InfiniteBatches) = 1
+Base.done(itr::InfiniteBatches, i) = false
+Base.next(itr::InfiniteBatches, i::Integer) = (itr[1], 1)
+Base.getindex(itr::InfiniteBatches, i) = subset_obs(itr.source, rand(all_indices(itr.source), itr.batchsize))
+
+# ----------------------------------------------------------------------------
+
 
 # "An explicit wrapper around an vector of SubsetObs"
 # immutable DataSubsets{D<:SubsetObs} <: AbstractSubsets
@@ -347,43 +409,47 @@ Base.next(itr::EachBatch, i) = (getobs(itr.source, i), i+1)
 # # Tips:
 # #   - Iterators can be nested
 # #   - Observations can be extracted immediately
-# for (x,y) in batches(shuffled_obs(X, Y), size = 10)
+# for (x,y) in (shuffled_obs(X, Y), size = 10)
 #     ...
 # end
 # ```
 # """
-# function batches(itr::SubsetObs; size = default_batch_size(itr.source))
-#     n = nobs(itr)
-#     T = typeof(size)
-#     idx_list = if T <: AbstractFloat
-#         # partition into 2 sets
-#         n1 = clamp(round(Int, size*n), 1, n)
-#         [1:n1, n1+1:n]
-#     elseif (T <: NTuple || T <: AbstractVector) && eltype(T) <: AbstractFloat
-#         nleft = n
-#         lst = []
-#         for (i,sz) in enumerate(size)
-#             ni = clamp(round(Int, sz*n), 0, nleft)
-#             push!(lst, n-nleft+1:n-nleft+ni)
-#             nleft -= ni
-#         end
-#         push!(lst, n-nleft+1:n)
-#         lst
-#     elseif T <: Integer
-#         offset = 0
-#         lst = []
-#         while offset < n
-#             sz = clamp(n - offset, 1, size)
-#             push!(lst, offset+1:offset+sz)
-#             offset += sz
-#         end
-#         lst
-#     end
-#     # @show idx_list
-#     subsets = typeof(itr)[SubsetObs(itr, idx) for idx in idx_list]
-#     DataSubsets(subsets)
-# end
-#
+
+function split_obs(source; at = 0.7)
+    n = nobs(itr)
+    T = typeof(at)
+    idx_list = if T <: AbstractFloat
+        # partition into 2 sets
+        n1 = clamp(round(Int, at*n), 1, n)
+        [1:n1, n1+1:n]
+    elseif (T <: NTuple || T <: AbstractVector) && eltype(T) <: AbstractFloat
+        nleft = n
+        lst = []
+        for (i,sz) in enumerate(at)
+            ni = clamp(round(Int, sz*n), 0, nleft)
+            push!(lst, n-nleft+1:n-nleft+ni)
+            nleft -= ni
+        end
+        push!(lst, n-nleft+1:n)
+        lst
+    else
+        throw(ArgumentError("Expecting a float or tuple/vector of floats for `at` in split_obs.  Got: $T"))
+    # elseif T <: Integer
+    #     offset = 0
+    #     lst = []
+    #     while offset < n
+    #         sz = clamp(n - offset, 1, size)
+    #         push!(lst, offset+1:offset+sz)
+    #         offset += sz
+    #     end
+    #     lst
+    end
+    batches(source, idx_list)
+    # @show idx_list
+    # subsets = typeof(itr)[SubsetObs(itr, idx) for idx in idx_list]
+    # DataSubsets(subsets)
+end
+
 # """
 # Sample a random minibatch (with replacement) repeatedly forever.
 #
@@ -396,8 +462,8 @@ Base.next(itr::EachBatch, i) = (getobs(itr.source, i), i+1)
 # function infinite_batches(itr::SubsetObs; size = default_batch_size(itr.source))
 #     repeatedly(() -> SubsetObs(itr.source, rand(1:nobs(itr.source), size)))
 # end
-#
-#
+
+
 # # ----------------------------------------------------------------------------
 # # ----------------------------------------------------------------------------
 # # Iterators of DataSubsets
@@ -446,16 +512,16 @@ Base.next(itr::EachBatch, i) = (getobs(itr.source, i), i+1)
 # ```
 # """
 # leave_one_out(itr::SubsetObs) = KFolds(itr, nobs(itr))
-#
-# # ----------------------------------------------------------------------------
-# # ----------------------------------------------------------------------------
-#
-# # generic method calls for anything that's not a SubsetObs
-# for f in [:batches, :infinite_batches, :kfolds, :leave_one_out]
-#     @eval begin
-#         $f(source; kw...) = $f(SubsetObs(source); kw...)
-#         $f(source...; kw...) = $f(SubsetObs(source); kw...)
-#     end
-# end
+
+# ----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
+
+# generic method calls for anything that's not a SubsetObs
+for f in [:each_batch, :batches, :infinite_batches, :split_obs] #, :kfolds, :leave_one_out]
+    @eval begin
+        # $f(source; kw...) = $f(source; kw...)
+        $f(source...; kw...) = $f(source; kw...)
+    end
+end
 
 end # module Iteration

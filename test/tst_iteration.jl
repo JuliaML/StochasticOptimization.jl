@@ -84,6 +84,19 @@ using StochasticOptimization.Iteration
     @test newx == X[:,2:2:n]
     @test newy == y[2:2:n]
 
+    # infinite nothing
+    itr3 = infinite_obs(nothing)
+    S,T = typeof(itr3).parameters
+    @test S == Void
+    @test T == Void
+    for (i,v) in enumerate(itr3)
+        @test v == nothing
+        if i > 3
+            break
+        end
+    end
+
+
     # # -----------------------------------------------
     # # BatchIterator
     #
