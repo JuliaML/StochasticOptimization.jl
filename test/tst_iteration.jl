@@ -91,54 +91,62 @@ using StochasticOptimization.Iteration
     @test T == Void
     for (i,v) in enumerate(itr3)
         @test v == nothing
-        if i > 3
-            break
-        end
+        i > 3 && break
     end
 
 
-    # # -----------------------------------------------
-    # # BatchIterator
-    #
-    # # test/train split
-    # train, test = batches(X,y,size=0.5)
-    # # @show train test
-    # @test typeof(train) <: Tuple
-    # @test typeof(test) <: Tuple
-    # @test train[1] == view(X,:,1:2)
-    # @test test[1] == view(X,:,3:4)
-    # @test train[2] == view(y,1:2)
-    # @test test[2] == view(y,3:4)
-    # @test nobs(train) == 2
-    # @test nobs(test) == 2
-    #
-    # # minibatch split
-    # bs = batches(X,y,size=2)
-    # @test typeof(bs) <: BatchIterator
-    # @test length(bs) == 2
-    # for (x,yi) in bs
-    #     # @show x yi
-    #     @test typeof(x) <: SubArray
-    #     @test typeof(yi) <: SubArray
-    #     @test size(x) == (2,2)
-    #     @test length(yi) == 2
-    #     for (xj,yj) in each_obs(x,yi)
-    #         # just to make sure there's no errors in nesting...
-    #     end
-    # end
-    #
-    # # train/validate/test split
-    # X = rand(2,10)
-    # y = rand(10)
-    # bs = batches(X,y,size=(0.5,0.2))
-    # train, validate, test = bs
-    # @test nobs(train) == 5
-    # @test nobs(validate) == 2
-    # @test nobs(test) == 3
-    # @test bs.subsets[1].indices == 1:5
-    # @test bs.subsets[2].indices == 6:7
-    # @test bs.subsets[3].indices == 8:10
-    #
+    # -----------------------------------------------
+    # BatchIterator
+
+    # test/train split
+    train, test = split_obs(X,y,at=0.5)
+    @test typeof(train) <: SubsetObs
+    @test typeof(test) <: SubsetObs
+    rng = 1:2
+    @test train.indices == rng
+    @test get(train) == (view(X,:,rng), view(y,rng))
+    @test nobs(train) == 2
+    @test nobs(test) == 2
+
+    # train/validate/test split
+    X = rand(2,10)
+    y = rand(10)
+    bs = split_obs(X,y,at=(0.5,0.2))
+    @test typeof(bs) <: Batches
+    train, validate, test = bs
+    @test nobs(train) == 5
+    @test nobs(validate) == 2
+    @test nobs(test) == 3
+    @test train.indices == 1:5
+    @test validate.indices == 6:7
+    @test test.indices == 8:10
+
+    # minibatch split
+    bs = each_batch(X,y,size=2)
+    @test typeof(bs) <: EachBatch
+    @test length(bs) == 5
+    for b in bs
+        # @show x yi
+        @test typeof(b) <: SubsetObs
+        x, yi = get(b)
+        @test typeof(x) <: SubArray
+        @test typeof(yi) <: SubArray
+        @test size(x) == (2,2)
+        @test length(yi) == 2
+        for (xj,yj) in each_obs(x,yi)
+            # just to make sure there's no errors in nesting...
+        end
+    end
+
+    # infinite_batches
+    ibs = infinite_batches(X,y,size=2)
+    for (i,batch) in enumerate(ibs)
+        @test typeof(batch) <: SubsetObs
+        @test length(batch) == 2
+        i > 4 && break
+    end
+
+
     # # -----------------------------------------------
     # # BatchesIterator
     #

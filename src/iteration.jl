@@ -160,10 +160,14 @@ nobs(itr::ObsIterator) = nobs(itr.source)
 getobs(itr::ObsIterator, idx) = getobs(itr.source, all_indices(itr)[idx])
 
 Base.rand(itr::ObsIterator, dims::Integer...) = getobs(itr.source, rand(all_indices(itr), dims...))
-Base.collect(itr::ObsIterator) = collect(getobs(itr.source, all_indices(itr)))
 Base.length(itr::ObsIterator) = length(all_indices(itr))
 Base.getindex(itr::ObsIterator, idx) = getobs(itr, idx)
-Base.get(itr::ObsIterator) = collect(itr)
+
+# views
+Base.get(itr::ObsIterator) = getobs(itr.source, all_indices(itr))
+
+# copies
+Base.collect(itr::ObsIterator) = collect(get(itr))
 
 # ----------------------------------------------------------------------------
 
@@ -272,6 +276,7 @@ end
 
 function default_batch_indices(source)
     batchsize = default_batch_size(source)
+    n = nobs(source)
     offset = 0
     lst = []
     while offset < n
@@ -324,7 +329,7 @@ immutable EachBatch{S,T} <: BatchIterator{T}
 end
 function EachBatch{S}(source::S; size=-1, count=-1)
     batchsize, batchcount = _compute_batch_settings(source, size, count)
-    EachBatch{S, obstype(source)}(source, batchsize, batchcount)
+    EachBatch{S, SubsetObs{S,SubsetObs{S,obstype(source)}}}(source, batchsize, batchcount)
 end
 const each_batch = EachBatch
 
@@ -342,7 +347,7 @@ immutable Batches{S,T,I} <: BatchIterator{T}
 end
 # Batches(source; indices = default_batch_indices(source)) = Batches(source, indices)
 function Batches{S,I}(source::S, indices::I)
-    Batches{S, obstype(source), I}(source, indices)
+    Batches{S, SubsetObs{S,obstype(source)}, I}(source, indices)
 end
 batches(source; indices = default_batch_indices(source)) = Batches(source, indices)
 # const batches = Batches
@@ -351,10 +356,10 @@ Base.start(itr::Batches) = 1
 Base.done(itr::Batches, i) = done(itr.batch_indices, i)
 function Base.next(itr::Batches, i)
     v, nexti = next(itr.batch_indices,i)
-    subset_obs(source, v), nexti
+    subset_obs(itr.source, v), nexti
 end
-Base.getindex(itr::Batches, i::Integer) = subset_obs(source, itr.batch_indices[i])
-Base.length(itr::Batches) = length(batch_indices)
+Base.getindex(itr::Batches, i::Integer) = subset_obs(itr.source, itr.batch_indices[i])
+Base.length(itr::Batches) = length(itr.batch_indices)
 
 # ----------------------------------------------------------------------------
 
@@ -363,7 +368,7 @@ immutable InfiniteBatches{S,T} <: BatchIterator{T}
     batchsize::Int
 end
 function InfiniteBatches{S}(source::S; size = default_batch_size(source))
-    InfiniteBatches{S, obstype(source)}(source, size)
+    InfiniteBatches{S, SubsetObs{S,obstype(source)}}(source, size)
 end
 const infinite_batches = InfiniteBatches
 
@@ -416,7 +421,7 @@ Base.getindex(itr::InfiniteBatches, i) = subset_obs(itr.source, rand(all_indices
 # """
 
 function split_obs(source; at = 0.7)
-    n = nobs(itr)
+    n = nobs(source)
     T = typeof(at)
     idx_list = if T <: AbstractFloat
         # partition into 2 sets
@@ -444,7 +449,7 @@ function split_obs(source; at = 0.7)
     #     end
     #     lst
     end
-    batches(source, idx_list)
+    batches(source, indices = idx_list)
     # @show idx_list
     # subsets = typeof(itr)[SubsetObs(itr, idx) for idx in idx_list]
     # DataSubsets(subsets)
