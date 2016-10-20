@@ -1,4 +1,6 @@
 
+module Iteration
+
 # NOTE: this all belongs in MLDataUtils.  It was originated as a PR to that package,
 #   but I'm instead experimenting with the concepts here
 
@@ -80,11 +82,17 @@ import Iterators: repeatedly, repeated
 import LearnBase: nobs, getobs
 
 export
-    AbstractSubset,
-    AbstractSubsets,
-    DataSubset,
-    DataSubsets,
-    KFolds,
+    DataIterator,
+        ObsIterator,        # each iteration is an observation T
+            EachObs,
+            DataSubset,
+            InfiniteObs,
+        BatchIterator,      # each iteration is a ObsIterator{T}
+            EachBatch,
+            Batches,
+            InfiniteBatches,
+        BatchesIterator,    # each iteration is a BatchIterator{T}
+            KFolds,
 
     eachobs,
     shuffled,
@@ -97,8 +105,10 @@ export
     leave_one_out,
     filterobs
 
-abstract AbstractSubset
-abstract AbstractSubsets
+abstract DataIterator{T} <: AbstractVector{T}
+    abstract ObsIterator{T} <: DataIterator{T}
+    abstract BatchIterator{T} <: DataIterator{T}
+    abstract BatchesIterator{T} <: DataIterator{T}
 
 # ----------------------------------------------------------------------------
 # standard definitions of nobs and getobs for use with DataSubset
@@ -131,6 +141,14 @@ getobs(tup::Tuple{}) = ()
 default_batch_size(source) = clamp(div(nobs(source), 5), 1, 100)
 
 # ----------------------------------------------------------------------------
+
+immutable EachObs{S,T} <: ObsIterator{T}
+    source::S
+end
+
+Base.length(itr::EachObs) = nobs(itr.source)
+Base.start(itr::EachObs) =
+
 # ----------------------------------------------------------------------------
 
 "Lazy subsetting of source data, tracking the indices of observations in the source data."
@@ -356,3 +374,5 @@ for f in [:batches, :infinite_batches, :kfolds, :leave_one_out]
         $f(source...; kw...) = $f(DataSubset(source); kw...)
     end
 end
+
+end # module Iteration
