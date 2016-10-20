@@ -39,6 +39,7 @@ export
     RMSProp
 
 include("iteration.jl")
+using .Iteration
 
 "Enacts a strategy to adjust the learning rate"
 abstract LearningRate

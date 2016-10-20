@@ -56,20 +56,21 @@ using StochasticOptimization.Iteration
     itr2 = subset_obs((X, y), rng)
     S,T,I = typeof(itr2).parameters
     @test S <: Tuple
-    @test S.parameters[1] <: SubArray
-    @test S.parameters[2] <: SubArray
+    @test S.parameters[1] <: Matrix
+    @test S.parameters[2] <: Vector
     @test T <: Tuple
     @test T.parameters[1] <: SubArray
-    @test T.parameters[2] <: SubArray
+    @test T.parameters[2] == Float64
     @test T == typeof(getobs((X,y), 1))
     @test I == typeof(rng)
+
     cx, cy = collect(itr2)
     @test typeof(cx) <: Matrix
     @test cx == X[:,rng]
     @test typeof(cy) <: Vector
     @test cy == y[rng]
     for (i,obs) in enumerate(itr2)
-        @test obs == getobs((X,y), i)
+        @test obs == getobs((X,y), rng[i])
     end
 
     # shuffling
@@ -77,11 +78,11 @@ using StochasticOptimization.Iteration
     @test length(ss.indices) == n
 
     # filtering
-    fitr = filter_obs(i -> i%2==0, X, y)
+    fitr = filtered_obs(i -> i%2==0, X, y)
     @test typeof(fitr) <: SubsetObs
-    newx,newy = fitr
-    @test newx == X[:,2:2:10]
-    @test newy == y[2:2:10]
+    newx,newy = collect(fitr)
+    @test newx == X[:,2:2:n]
+    @test newy == y[2:2:n]
 
     # # -----------------------------------------------
     # # BatchIterator
@@ -155,5 +156,5 @@ using StochasticOptimization.Iteration
     #     @test nobs(test) == 1
     # end
 
-    
+
 end

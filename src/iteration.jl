@@ -133,8 +133,9 @@ end
 end
 
 # add support for arbitrary tuples
-nobs{T<:Tuple}(tup::T) = nobs(tup[1])
-getobs{T<:Tuple}(tup::T, idx) = map(a -> getobs(a, idx), tup)
+nobs(tup::Tuple) = nobs(tup[1])
+getobs(tup::Tuple, idx) = map(a -> getobs(a, idx), tup)
+Base.collect(tup::Tuple) = map(collect, tup)
 
 # specialized for empty tuples
 nobs(tup::Tuple{}) = 0
@@ -144,7 +145,16 @@ obstype(source) = typeof(getobs(source, 1))
 
 # default implementations
 nobs(itr::ObsIterator) = nobs(itr.source)
-getobs(itr::ObsIterator, idx) = getobs(itr.source, 1:nobs(itr))
+all_indices(itr::ObsIterator) = 1:nobs(itr)
+getobs(itr::ObsIterator, idx) = getobs(itr.source, all_indices(itr)[idx])
+
+Base.rand(itr::ObsIterator, dims::Integer...) = getobs(itr.source, rand(all_indices(itr), dims...))
+Base.collect(itr::ObsIterator) = collect(getobs(itr.source, all_indices(itr)))
+Base.length(itr::ObsIterator) = length(all_indices(itr))
+Base.size(itr::ObsIterator) = size(all_indices(itr))
+Base.getindex(itr::ObsIterator, idx) = getobs(itr, idx)
+Base.get(itr::ObsIterator) = collect(itr)
+
 
 # ----------------------------------------------------------------------------
 
@@ -163,12 +173,12 @@ end
 EachObs{S}(source::S) = EachObs{S, obstype(source)}(source)
 const each_obs = EachObs
 
-Base.length(itr::EachObs) = nobs(itr.source)
+# Base.length(itr::EachObs) = nobs(itr.source)
 Base.start(itr::EachObs) = 1
 Base.done(itr::EachObs, i) = i > length(itr)
 Base.next(itr::EachObs, i) = (getobs(itr.source, i), i+1)
-Base.rand(itr::EachObs, args...) = getobs(itr.source, rand(1:length(itr), args...))
-Base.collect(itr::EachObs) = collect(itr.source)
+# Base.rand(itr::EachObs, dims::Integer...) = getobs(itr.source, rand(1:length(itr), dims...))
+# Base.collect(itr::EachObs) = collect(itr.source)
 
 # ----------------------------------------------------------------------------
 
@@ -186,16 +196,17 @@ end
 const subset_obs = SubsetObs
 
 nobs(itr::SubsetObs) = length(itr.indices)
-getobs(itr::SubsetObs, idx) = getobs(itr.source, itr.indices[idx])
+all_indices(itr::SubsetObs) = itr.indices
+# getobs(itr::SubsetObs, idx) = getobs(itr.source, itr.indices[idx])
 
-Base.length(itr::SubsetObs) = length(itr.indices)
-Base.getindex(itr::SubsetObs, idx) = getobs(itr, idx)
-Base.get(itr::SubsetObs) = getobs(itr, itr.indices)
+# Base.length(itr::SubsetObs) = length(itr.indices)
+# Base.getindex(itr::SubsetObs, idx) = getobs(itr, idx)
+# Base.get(itr::SubsetObs) = getobs(itr, itr.indices)
 Base.start(itr::SubsetObs) = 1
 Base.done(itr::SubsetObs, i) = i > length(itr.indices)
 Base.next(itr::SubsetObs, i) = (getobs(itr.source, itr.indices[i]), i+1)
-Base.rand(itr::SubsetObs, args...) = getobs(itr.source, rand(itr.indices, args...))
-Base.collect(itr::SubsetObs) = collect(getobs(itr.source, itr.indices))
+# Base.rand(itr::SubsetObs, dims::Integer...) = getobs(itr.source, rand(itr.indices, dims...))
+# Base.collect(itr::SubsetObs) = collect(getobs(itr.source, itr.indices))
 
 # ----------------------------------------------------------------------------
 
@@ -218,8 +229,8 @@ Base.length(itr::InfiniteObs) = Inf
 Base.start(itr::InfiniteObs) = 1
 Base.done(itr::InfiniteObs, i) = false
 Base.next(itr::InfiniteObs, i) = (rand(itr), i+1)
-Base.rand(itr::InfiniteObs, args...) = getobs(itr.source, rand(1:nobs(source), args...))
-Base.collect(itr::InfiniteObs) = collect(itr.source)
+# Base.rand(itr::InfiniteObs, dims::Integer...) = getobs(itr.source, rand(1:nobs(source), dims...))
+# Base.collect(itr::InfiniteObs) = collect(itr.source)
 
 # ----------------------------------------------------------------------------
 
@@ -256,148 +267,148 @@ filtered_obs(f::Function, s_1, s_2, s_rest...) = filtered_obs(f, (s_1, s_2, s_re
 # ----------------------------------------------------------------------------
 # ----------------------------------------------------------------------------
 
-"An explicit wrapper around an vector of SubsetObs"
-immutable DataSubsets{D<:SubsetObs} <: AbstractSubsets
-    subsets::Vector{D}
-end
-
-Base.getindex(subsets::DataSubsets, i::Int) = get(subsets.subsets[i])
-Base.start(subsets::DataSubsets) = 1
-Base.done(subsets::DataSubsets, i) = i > length(subsets.subsets)
-Base.next(subsets::DataSubsets, i) = (get(subsets.subsets[i]), i+1)
-Base.length(subsets::DataSubsets) = length(subsets.subsets)
-Base.size(subsets::DataSubsets) = size(subsets.subsets)
-Base.rand(subsets::DataSubsets) = rand(subsets.subsets)
-Base.collect(subsets::DataSubsets) = map(collect, subsets.subsets)
-
-# ----------------------------------------------------------------------------
-
-default_batch_size(source) = clamp(div(nobs(source), 5), 1, 100)
-
-"""
-Split the data apart, either by specifying a size or giving a percentage split point.
-
-```julia
-# split into training and test sets, 60%/40% respectively
-train, test = batches(X, Y, size = 0.6)
-
-# split into equal-sized minibatches of 10 observations each
-for batch in batches(X, Y, size = 10)
-    ...
-end
-
-# Tips:
-#   - Iterators can be nested
-#   - Observations can be extracted immediately
-for (x,y) in batches(shuffled_obs(X, Y), size = 10)
-    ...
-end
-```
-"""
-function batches(itr::SubsetObs; size = default_batch_size(itr.source))
-    n = nobs(itr)
-    T = typeof(size)
-    idx_list = if T <: AbstractFloat
-        # partition into 2 sets
-        n1 = clamp(round(Int, size*n), 1, n)
-        [1:n1, n1+1:n]
-    elseif (T <: NTuple || T <: AbstractVector) && eltype(T) <: AbstractFloat
-        nleft = n
-        lst = []
-        for (i,sz) in enumerate(size)
-            ni = clamp(round(Int, sz*n), 0, nleft)
-            push!(lst, n-nleft+1:n-nleft+ni)
-            nleft -= ni
-        end
-        push!(lst, n-nleft+1:n)
-        lst
-    elseif T <: Integer
-        offset = 0
-        lst = []
-        while offset < n
-            sz = clamp(n - offset, 1, size)
-            push!(lst, offset+1:offset+sz)
-            offset += sz
-        end
-        lst
-    end
-    # @show idx_list
-    subsets = typeof(itr)[SubsetObs(itr, idx) for idx in idx_list]
-    DataSubsets(subsets)
-end
-
-"""
-Sample a random minibatch (with replacement) repeatedly forever.
-
-```julia
-for batch in infinite_batches(X, Y, size = 10)
-    ...
-end
-```
-"""
-function infinite_batches(itr::SubsetObs; size = default_batch_size(itr.source))
-    repeatedly(() -> SubsetObs(itr.source, rand(1:nobs(itr.source), size)))
-end
-
-
-# ----------------------------------------------------------------------------
-# ----------------------------------------------------------------------------
-# Iterators of DataSubsets
-
-immutable KFolds{S}
-    itr::SubsetObs{S}
-    k::Int
-end
-
-fold_count(kf::KFolds) = div(nobs(kf.itr), kf.k)
-start_index(kf::KFolds, i::Int) = clamp((i-1) * fold_count(kf) + 1, 1, nobs(kf.itr))
-end_index(kf::KFolds, i::Int) = clamp(i * fold_count(kf), 1, nobs(kf.itr))
-
-function Base.getindex(kf::KFolds, idx)
-    test_idx = start_index(kf,idx):end_index(kf,idx)
-    train_idx = setdiff(1:nobs(kf.itr), test_idx)
-    # @show train_idx, test_idx
-    kf.itr[train_idx], kf.itr[test_idx]
-end
-Base.start(kf::KFolds) = 1
-Base.done(kf::KFolds, i) = i > kf.k
-Base.next(kf::KFolds, i) = (kf[i], i+1)
-Base.length(kf::KFolds) = kf.k
-Base.size(kf::KFolds) = (kf.k,)
-
-
-"""
-K-Folds validation.  Iterate over k pairs of (train,test) splits, where each test set has approximately nobs/k observations.
-
-```julia
-for (train, test) in kfolds(X, y, k=10)
-    ...
-end
-```
-"""
-kfolds(itr::SubsetObs; k::Int = 5) = KFolds(itr, k)
-
-
-"""
-Leave-one-out validation.  K-Folds where k == nobs.
-
-```julia
-for (train, test) in leave_one_out(X, y)
-    ...
-end
-```
-"""
-leave_one_out(itr::SubsetObs) = KFolds(itr, nobs(itr))
-
-# ----------------------------------------------------------------------------
-# ----------------------------------------------------------------------------
-
-# generic method calls for anything that's not a SubsetObs
-for f in [:batches, :infinite_batches, :kfolds, :leave_one_out]
-    @eval begin
-        $f(source; kw...) = $f(SubsetObs(source); kw...)
-        $f(source...; kw...) = $f(SubsetObs(source); kw...)
-    end
-end
+# "An explicit wrapper around an vector of SubsetObs"
+# immutable DataSubsets{D<:SubsetObs} <: AbstractSubsets
+#     subsets::Vector{D}
+# end
+#
+# Base.getindex(subsets::DataSubsets, i::Int) = get(subsets.subsets[i])
+# Base.start(subsets::DataSubsets) = 1
+# Base.done(subsets::DataSubsets, i) = i > length(subsets.subsets)
+# Base.next(subsets::DataSubsets, i) = (get(subsets.subsets[i]), i+1)
+# Base.length(subsets::DataSubsets) = length(subsets.subsets)
+# Base.size(subsets::DataSubsets) = size(subsets.subsets)
+# Base.rand(subsets::DataSubsets) = rand(subsets.subsets)
+# Base.collect(subsets::DataSubsets) = map(collect, subsets.subsets)
+#
+# # ----------------------------------------------------------------------------
+#
+# default_batch_size(source) = clamp(div(nobs(source), 5), 1, 100)
+#
+# """
+# Split the data apart, either by specifying a size or giving a percentage split point.
+#
+# ```julia
+# # split into training and test sets, 60%/40% respectively
+# train, test = batches(X, Y, size = 0.6)
+#
+# # split into equal-sized minibatches of 10 observations each
+# for batch in batches(X, Y, size = 10)
+#     ...
+# end
+#
+# # Tips:
+# #   - Iterators can be nested
+# #   - Observations can be extracted immediately
+# for (x,y) in batches(shuffled_obs(X, Y), size = 10)
+#     ...
+# end
+# ```
+# """
+# function batches(itr::SubsetObs; size = default_batch_size(itr.source))
+#     n = nobs(itr)
+#     T = typeof(size)
+#     idx_list = if T <: AbstractFloat
+#         # partition into 2 sets
+#         n1 = clamp(round(Int, size*n), 1, n)
+#         [1:n1, n1+1:n]
+#     elseif (T <: NTuple || T <: AbstractVector) && eltype(T) <: AbstractFloat
+#         nleft = n
+#         lst = []
+#         for (i,sz) in enumerate(size)
+#             ni = clamp(round(Int, sz*n), 0, nleft)
+#             push!(lst, n-nleft+1:n-nleft+ni)
+#             nleft -= ni
+#         end
+#         push!(lst, n-nleft+1:n)
+#         lst
+#     elseif T <: Integer
+#         offset = 0
+#         lst = []
+#         while offset < n
+#             sz = clamp(n - offset, 1, size)
+#             push!(lst, offset+1:offset+sz)
+#             offset += sz
+#         end
+#         lst
+#     end
+#     # @show idx_list
+#     subsets = typeof(itr)[SubsetObs(itr, idx) for idx in idx_list]
+#     DataSubsets(subsets)
+# end
+#
+# """
+# Sample a random minibatch (with replacement) repeatedly forever.
+#
+# ```julia
+# for batch in infinite_batches(X, Y, size = 10)
+#     ...
+# end
+# ```
+# """
+# function infinite_batches(itr::SubsetObs; size = default_batch_size(itr.source))
+#     repeatedly(() -> SubsetObs(itr.source, rand(1:nobs(itr.source), size)))
+# end
+#
+#
+# # ----------------------------------------------------------------------------
+# # ----------------------------------------------------------------------------
+# # Iterators of DataSubsets
+#
+# immutable KFolds{S}
+#     itr::SubsetObs{S}
+#     k::Int
+# end
+#
+# fold_count(kf::KFolds) = div(nobs(kf.itr), kf.k)
+# start_index(kf::KFolds, i::Int) = clamp((i-1) * fold_count(kf) + 1, 1, nobs(kf.itr))
+# end_index(kf::KFolds, i::Int) = clamp(i * fold_count(kf), 1, nobs(kf.itr))
+#
+# function Base.getindex(kf::KFolds, idx)
+#     test_idx = start_index(kf,idx):end_index(kf,idx)
+#     train_idx = setdiff(1:nobs(kf.itr), test_idx)
+#     # @show train_idx, test_idx
+#     kf.itr[train_idx], kf.itr[test_idx]
+# end
+# Base.start(kf::KFolds) = 1
+# Base.done(kf::KFolds, i) = i > kf.k
+# Base.next(kf::KFolds, i) = (kf[i], i+1)
+# Base.length(kf::KFolds) = kf.k
+# Base.size(kf::KFolds) = (kf.k,)
+#
+#
+# """
+# K-Folds validation.  Iterate over k pairs of (train,test) splits, where each test set has approximately nobs/k observations.
+#
+# ```julia
+# for (train, test) in kfolds(X, y, k=10)
+#     ...
+# end
+# ```
+# """
+# kfolds(itr::SubsetObs; k::Int = 5) = KFolds(itr, k)
+#
+#
+# """
+# Leave-one-out validation.  K-Folds where k == nobs.
+#
+# ```julia
+# for (train, test) in leave_one_out(X, y)
+#     ...
+# end
+# ```
+# """
+# leave_one_out(itr::SubsetObs) = KFolds(itr, nobs(itr))
+#
+# # ----------------------------------------------------------------------------
+# # ----------------------------------------------------------------------------
+#
+# # generic method calls for anything that's not a SubsetObs
+# for f in [:batches, :infinite_batches, :kfolds, :leave_one_out]
+#     @eval begin
+#         $f(source; kw...) = $f(SubsetObs(source); kw...)
+#         $f(source...; kw...) = $f(SubsetObs(source); kw...)
+#     end
+# end
 
 end # module Iteration

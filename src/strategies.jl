@@ -32,7 +32,7 @@ function learn!(model, meta::MetaLearner, data)
     pre_hook(meta, model)
     for (i, item) in enumerate(data)
         for mgr in meta.managers
-            learn!(model, mgr, isbatches(data) ? eachobs(item) : item)
+            learn!(model, mgr, item)
         end
 
         iter_hook(meta, model, i)
@@ -249,7 +249,7 @@ function search_direction(model, ga::GradientAverager, obs)
 end
 
 # for a minibatch, compute the average gradient
-function search_direction(model, ga::GradientAverager, batch::DataIterator)
+function search_direction(model, ga::GradientAverager, batch::ObsIterator)
     fill!(ga.∇avg, 0.0)
     scalar = 1 / nobs(batch)
     ∇ = grad(model)
