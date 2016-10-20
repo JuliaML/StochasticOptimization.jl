@@ -9,22 +9,22 @@ module Iteration
 # X = rand(2,100) # input matrix
 # y = rand(100)  # target vector
 #
-# for x in eachobs(X)
+# for x in each_obs(X)
 #     # x = view(X,:,i)
 # end
 #
-# for yi in eachobs(y)
+# for yi in each_obs(y)
 #     # yi = y[i]
 # end
 #
 # ### iterate one observation at a time: obs = (x, yi)
 #
-# for obs in eachobs(X,y)
+# for obs in each_obs(X,y)
 #     # obs = (view(X,:,i), y[i])
 # end
 #
-# for obs in eachobs(shuffled(X,y))
-#     # obs = (view(X,:,i), y[i])  where i comes from a shuffled indices
+# for obs in each_obs(shuffled_obs(X,y))
+#     # obs = (view(X,:,i), y[i])  where i comes from a shuffled_obs indices
 # end
 #
 # for obs in sample_forever(X,y)
@@ -39,8 +39,8 @@ module Iteration
 #     # we could also do "for (x,yi) in ..."
 # end
 #
-# for batch in batches(shuffled(X,y), size=10)
-#     # same, but the indices are shuffled first
+# for batch in batches(shuffled_obs(X,y), size=10)
+#     # same, but the indices are shuffled_obs first
 # end
 #
 # # a float for size would imply a fractional split.
@@ -70,7 +70,7 @@ module Iteration
 # ### utils
 #
 # # lazy filter on index
-# newX, newy = filterobs(i -> y[i] < 2, X, y)
+# newX, newy = filtered_obs(i -> y[i] < 2, X, y)
 
 # TODO: do we even need AbstractSubset/AbstractSubsets?
 
@@ -85,7 +85,7 @@ export
     DataIterator,
         ObsIterator,        # each iteration is an observation T
             EachObs,
-            DataSubset,
+            SubsetObs,
             InfiniteObs,
         BatchIterator,      # each iteration is a ObsIterator{T}
             EachBatch,
@@ -94,16 +94,19 @@ export
         BatchesIterator,    # each iteration is a BatchIterator{T}
             KFolds,
 
-    eachobs,
-    shuffled,
-    infinite_obs,
+    each_obs,     # in-order
+    subset_obs,   # like SubArray
+    shuffled_obs, # subset_obs(source, shuffle(1:nobs(source)))
+    infinite_obs, #
+    filtered_obs,
+    random_obs,
+    each_batch,
     batches,
     infinite_batches,
     repeatedly,
     repeated,
     kfolds,
-    leave_one_out,
-    filterobs
+    leave_one_out
 
 abstract DataIterator{T} <: AbstractVector{T}
     abstract ObsIterator{T} <: DataIterator{T}
@@ -111,7 +114,7 @@ abstract DataIterator{T} <: AbstractVector{T}
     abstract BatchesIterator{T} <: DataIterator{T}
 
 # ----------------------------------------------------------------------------
-# standard definitions of nobs and getobs for use with DataSubset
+# standard definitions of nobs and getobs for use with SubsetObs
 
 @generated function nobs(A::AbstractArray)
     T, N = A.parameters
@@ -137,74 +140,64 @@ getobs{T<:Tuple}(tup::T, idx) = map(a -> getobs(a, idx), tup)
 nobs(tup::Tuple{}) = 0
 getobs(tup::Tuple{}) = ()
 
+obstype(source) = typeof(getobs(source, 1))
 
-default_batch_size(source) = clamp(div(nobs(source), 5), 1, 100)
+# default implementations
+nobs(itr::ObsIterator) = nobs(itr.source)
+getobs(itr::ObsIterator, idx) = getobs(itr.source, 1:nobs(itr))
 
 # ----------------------------------------------------------------------------
 
+"""
+Iterate over source data in-order.
+
+```julia
+for (x,y) in each_obs(X,Y)
+    ...
+end
+```
+"""
 immutable EachObs{S,T} <: ObsIterator{T}
     source::S
 end
+EachObs{S}(source::S) = EachObs{S, obstype(source)}(source)
+const each_obs = EachObs
 
 Base.length(itr::EachObs) = nobs(itr.source)
-Base.start(itr::EachObs) =
+Base.start(itr::EachObs) = 1
+Base.done(itr::EachObs, i) = i > length(itr)
+Base.next(itr::EachObs, i) = (getobs(itr.source, i), i+1)
+Base.rand(itr::EachObs, args...) = getobs(itr.source, rand(1:length(itr), args...))
+Base.collect(itr::EachObs) = collect(itr.source)
 
 # ----------------------------------------------------------------------------
 
 "Lazy subsetting of source data, tracking the indices of observations in the source data."
-immutable DataSubset{S,I<:AbstractVector{Int}} <: AbstractSubset
+immutable SubsetObs{S,T,I<:AbstractVector{Int}} <: ObsIterator{T}
     source::S
     indices::I
 end
-DataSubset(source) = DataSubset(source, 1:nobs(source))
-DataSubset(subset::DataSubset, indices = 1:nobs(subset)) = DataSubset(subset.source, subset.indices[indices])
+SubsetObs(source) = SubsetObs(source, 1:nobs(source))
+function SubsetObs{S,I}(source::S, indices::I)
+    SubsetObs{S,obstype(source),I}(source, indices)
+end
+# TODO: allow lazily composing subsets
+# SubsetObs(itr::SubsetObs, indices = 1:nobs(itr)) = SubsetObs(itr.source, itr.indices[indices])
+const subset_obs = SubsetObs
 
-Base.get(subset::DataSubset) = getobs(subset.source, subset.indices)
+nobs(itr::SubsetObs) = length(itr.indices)
+getobs(itr::SubsetObs, idx) = getobs(itr.source, itr.indices[idx])
 
-Base.length(subset::DataSubset) = length(subset.indices)
-Base.size(subset::DataSubset) = size(subset.indices)
-nobs(subset::DataSubset) = length(subset.indices)
-
-Base.getindex(subset::DataSubset, idx) = getobs(subset.source, subset.indices[idx])
-getobs(subset::DataSubset, idx) = getobs(subset.source, subset.indices[idx])
-
-Base.start(subset::DataSubset) = 1
-Base.done(subset::DataSubset, i) = i > length(subset.indices)
-Base.next(subset::DataSubset, i) = (getobs(subset.source, subset.indices[i]), i+1)
-
-Base.rand(subset::DataSubset, args...) = getobs(subset.source, rand(subset.indices, args...))
-
-Base.collect(subset::DataSubset) = collect(getobs(subset.source, subset.indices))
-Base.collect{S<:Tuple}(subset::DataSubset{S}) = map(collect, getobs(subset.source, subset.indices))
+Base.length(itr::SubsetObs) = length(itr.indices)
+Base.getindex(itr::SubsetObs, idx) = getobs(itr, idx)
+Base.get(itr::SubsetObs) = getobs(itr, itr.indices)
+Base.start(itr::SubsetObs) = 1
+Base.done(itr::SubsetObs, i) = i > length(itr.indices)
+Base.next(itr::SubsetObs, i) = (getobs(itr.source, itr.indices[i]), i+1)
+Base.rand(itr::SubsetObs, args...) = getobs(itr.source, rand(itr.indices, args...))
+Base.collect(itr::SubsetObs) = collect(getobs(itr.source, itr.indices))
 
 # ----------------------------------------------------------------------------
-
-# call with a tuple for more than one arg
-for f in [:eachobs, :shuffled, :infinite_obs]
-    @eval $f(s_1, s_2, s_rest...) = $f((s_1, s_2, s_rest...))
-end
-
-"""
-Iterate over source data.
-
-```julia
-for (x,y) in eachobs(X,Y)
-    ...
-end
-```
-"""
-eachobs(source) = DataSubset(source)
-
-"""
-Iterate over shuffled (randomized) source data.  This is non-copy and non-mutating (only the indices are shuffled).
-
-```julia
-for (x,y) in shuffled(X,Y)
-    ...
-end
-```
-"""
-shuffled(source) = DataSubset(source, shuffle(1:nobs(source)))
 
 """
 Infinitely return a random observation.
@@ -215,26 +208,56 @@ for (x,y) in infinite_obs(X,Y)
 end
 ```
 """
-infinite_obs(source) = repeatedly(() -> rand(DataSubset(source)))
+immutable InfiniteObs{S,T} <: ObsIterator{T}
+    source::S
+end
+InfiniteObs{S}(source::S) = InfiniteObs{S, obstype(source)}(source)
+const infinite_obs = InfiniteObs
+
+Base.length(itr::InfiniteObs) = Inf
+Base.start(itr::InfiniteObs) = 1
+Base.done(itr::InfiniteObs, i) = false
+Base.next(itr::InfiniteObs, i) = (rand(itr), i+1)
+Base.rand(itr::InfiniteObs, args...) = getobs(itr.source, rand(1:nobs(source), args...))
+Base.collect(itr::InfiniteObs) = collect(itr.source)
+
+# ----------------------------------------------------------------------------
+
+# call with a tuple for more than one arg
+for f in [:each_obs, :subset_obs, :infinite_obs, :shuffled_obs, :filtered_obs]
+    @eval $f(s_1, s_2, s_rest...) = $f((s_1, s_2, s_rest...))
+end
+
+
+"""
+Iterate over shuffled_obs (randomized) source data.  This is non-copy and non-mutating (only the indices are shuffled_obs).
+
+```julia
+for (x,y) in shuffled_obs(X,Y)
+    ...
+end
+```
+"""
+shuffled_obs(source) = SubsetObs(source, shuffle(1:nobs(source)))
 
 """
 Non-copy, non-mutating filter over observation indices.
 
 ```julia
-for (x, yi) in filterobs(i -> y[i] < 2, X, y)
+for (x, yi) in filtered_obs(i -> y[i] < 2, X, y)
     ...
 end
 ```
 """
-filterobs(f::Function, subset::DataSubset) = getobs(subset.source, filter(f, subset.indices))
-filterobs(f::Function, source) = getobs(source, filter(f, 1:nobs(source)))
-filterobs(f::Function, s_1, s_2, s_rest...) = filterobs(f, (s_1, s_2, s_rest...))
+filtered_obs(f::Function, itr::SubsetObs) = SubsetObs(itr.source, filter(f, itr.indices))
+filtered_obs(f::Function, source) = SubsetObs(source, filter(f, 1:nobs(source)))
+filtered_obs(f::Function, s_1, s_2, s_rest...) = filtered_obs(f, (s_1, s_2, s_rest...))
 
 # ----------------------------------------------------------------------------
 # ----------------------------------------------------------------------------
 
-"An explicit wrapper around an vector of DataSubset"
-immutable DataSubsets{D<:DataSubset} <: AbstractSubsets
+"An explicit wrapper around an vector of SubsetObs"
+immutable DataSubsets{D<:SubsetObs} <: AbstractSubsets
     subsets::Vector{D}
 end
 
@@ -248,6 +271,8 @@ Base.rand(subsets::DataSubsets) = rand(subsets.subsets)
 Base.collect(subsets::DataSubsets) = map(collect, subsets.subsets)
 
 # ----------------------------------------------------------------------------
+
+default_batch_size(source) = clamp(div(nobs(source), 5), 1, 100)
 
 """
 Split the data apart, either by specifying a size or giving a percentage split point.
@@ -264,13 +289,13 @@ end
 # Tips:
 #   - Iterators can be nested
 #   - Observations can be extracted immediately
-for (x,y) in batches(shuffled(X, Y), size = 10)
+for (x,y) in batches(shuffled_obs(X, Y), size = 10)
     ...
 end
 ```
 """
-function batches(subset::DataSubset; size = default_batch_size(subset.source))
-    n = nobs(subset)
+function batches(itr::SubsetObs; size = default_batch_size(itr.source))
+    n = nobs(itr)
     T = typeof(size)
     idx_list = if T <: AbstractFloat
         # partition into 2 sets
@@ -297,7 +322,7 @@ function batches(subset::DataSubset; size = default_batch_size(subset.source))
         lst
     end
     # @show idx_list
-    subsets = typeof(subset)[DataSubset(subset, idx) for idx in idx_list]
+    subsets = typeof(itr)[SubsetObs(itr, idx) for idx in idx_list]
     DataSubsets(subsets)
 end
 
@@ -310,8 +335,8 @@ for batch in infinite_batches(X, Y, size = 10)
 end
 ```
 """
-function infinite_batches(subset::DataSubset; size = default_batch_size(subset.source))
-    repeatedly(() -> DataSubset(subset.source, rand(1:nobs(subset.source), size)))
+function infinite_batches(itr::SubsetObs; size = default_batch_size(itr.source))
+    repeatedly(() -> SubsetObs(itr.source, rand(1:nobs(itr.source), size)))
 end
 
 
@@ -320,19 +345,19 @@ end
 # Iterators of DataSubsets
 
 immutable KFolds{S}
-    subset::DataSubset{S}
+    itr::SubsetObs{S}
     k::Int
 end
 
-fold_count(kf::KFolds) = div(nobs(kf.subset), kf.k)
-start_index(kf::KFolds, i::Int) = clamp((i-1) * fold_count(kf) + 1, 1, nobs(kf.subset))
-end_index(kf::KFolds, i::Int) = clamp(i * fold_count(kf), 1, nobs(kf.subset))
+fold_count(kf::KFolds) = div(nobs(kf.itr), kf.k)
+start_index(kf::KFolds, i::Int) = clamp((i-1) * fold_count(kf) + 1, 1, nobs(kf.itr))
+end_index(kf::KFolds, i::Int) = clamp(i * fold_count(kf), 1, nobs(kf.itr))
 
 function Base.getindex(kf::KFolds, idx)
     test_idx = start_index(kf,idx):end_index(kf,idx)
-    train_idx = setdiff(1:nobs(kf.subset), test_idx)
+    train_idx = setdiff(1:nobs(kf.itr), test_idx)
     # @show train_idx, test_idx
-    kf.subset[train_idx], kf.subset[test_idx]
+    kf.itr[train_idx], kf.itr[test_idx]
 end
 Base.start(kf::KFolds) = 1
 Base.done(kf::KFolds, i) = i > kf.k
@@ -350,7 +375,7 @@ for (train, test) in kfolds(X, y, k=10)
 end
 ```
 """
-kfolds(subset::DataSubset; k::Int = 5) = KFolds(subset, k)
+kfolds(itr::SubsetObs; k::Int = 5) = KFolds(itr, k)
 
 
 """
@@ -362,16 +387,16 @@ for (train, test) in leave_one_out(X, y)
 end
 ```
 """
-leave_one_out(subset::DataSubset) = KFolds(subset, nobs(subset))
+leave_one_out(itr::SubsetObs) = KFolds(itr, nobs(itr))
 
 # ----------------------------------------------------------------------------
 # ----------------------------------------------------------------------------
 
-# generic method calls for anything that's not a DataSubset
+# generic method calls for anything that's not a SubsetObs
 for f in [:batches, :infinite_batches, :kfolds, :leave_one_out]
     @eval begin
-        $f(source; kw...) = $f(DataSubset(source); kw...)
-        $f(source...; kw...) = $f(DataSubset(source); kw...)
+        $f(source; kw...) = $f(SubsetObs(source); kw...)
+        $f(source...; kw...) = $f(SubsetObs(source); kw...)
     end
 end
 
