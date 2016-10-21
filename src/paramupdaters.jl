@@ -1,6 +1,6 @@
 
-# this might be used for Nesterov lookahead, or similar
-before_grad_calc(θ::AbstractVector, updater::ParamUpdater, ∇::AbstractVector) = return
+# # this might be used for Nesterov lookahead, or similar
+# before_grad_calc(θ::AbstractVector, updater::ParamUpdater, ∇::AbstractVector) = return
 
 # TODO: add citations/links for each method
 # note: good ref: http://sebastianruder.com/optimizing-gradient-descent/
@@ -8,33 +8,33 @@ before_grad_calc(θ::AbstractVector, updater::ParamUpdater, ∇::AbstractVector)
 
 "Stochastic Gradient Descent with Momentum"
 type SGD{T<:Number} <: ParamUpdater
-    mom::T # momentum
-    last_Δ::Vector{T}
+    mom::T              # momentum
+    lastchg::Vector{T}   # most recent grad change
     SGD(mom::T) = new(mom)
 end
 SGD{T}(::Type{T}, mom = T(0.0)) = SGD{T}(T(mom))
 SGD{T}(mom::T = 0.0) = SGD{T}(mom)
 
 function init(updater::SGD, model)
-    updater.last_Δ = zeros(params(model))
+    updater.lastchg = zeros(params(model))
     return
 end
 
-# add momentum into θ, and reset last_Δ
-function before_grad_calc(θ::AbstractVector, updater::SGD, ∇::AbstractVector)
-    @inbounds for (i,k) in zip(eachindex(θ), eachindex(updater.last_Δ))
-        momchg = updater.mom * updater.last_Δ[k]
-        updater.last_Δ[k] = momchg
-        θ[i] += momchg
-    end
-end
+# # add momentum into θ, and reset lastchg
+# function before_grad_calc(θ::AbstractVector, updater::SGD, ∇::AbstractVector)
+#     @inbounds for (i,k) in zip(eachindex(θ), eachindex(updater.lastchg))
+#         momchg = updater.mom * updater.lastchg[k]
+#         updater.lastchg[k] = momchg
+#         θ[i] += momchg
+#     end
+# end
 
 #
 function update!(θ::AbstractVector, updater::SGD, ∇::AbstractVector, lr::Number)
-    @inbounds for (i,j,k) in zip(eachindex(θ), eachindex(∇), eachindex(updater.last_Δ))
-        chg = -lr * ∇[j]
+    @inbounds for (i,j,k) in zip(eachindex(θ), eachindex(∇), eachindex(updater.lastchg))
+        chg = -lr * ∇[j] + updater.mom * updater.lastchg[k]
         θ[i] += chg
-        updater.last_Δ[k] += chg
+        updater.lastchg[k] = chg
     end
 end
 

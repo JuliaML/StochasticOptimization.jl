@@ -10,6 +10,8 @@ import LearnBase: value, learn!, update!
 export
     LearningStrategy,
     MetaLearner,
+    make_learner,
+
     MaxIter,
     TimeLimit,
     ConvergenceFunction,
@@ -18,8 +20,11 @@ export
     Tracer,
     Converged,
     ConvergedTo,
+
     GradientLearner,
-    make_learner,
+    OnlineGradAvg,
+    SearchDirection,
+    GradientAverager,
 
     pre_hook,
     iter_hook,
@@ -52,6 +57,8 @@ include("paramupdaters.jl")
 "Holds optimizer state and parameters"
 abstract LearningStrategy
 include("strategies.jl")
+include("gradients/gradients.jl")
+include("gradients/online_gradients.jl")
 
 # ---------------------------------------------------------------------------------
 
