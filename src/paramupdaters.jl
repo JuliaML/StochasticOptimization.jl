@@ -6,6 +6,8 @@
 # note: good ref: http://sebastianruder.com/optimizing-gradient-descent/
 # note: good ref: https://www.quora.com/What-are-differences-between-update-rules-like-AdaDelta-RMSProp-AdaGrad-and-AdaM
 
+init(updater::ParamUpdater, model::Learnable) = init(updater, params(model))
+
 "Stochastic Gradient Descent with Momentum"
 type SGD{T<:Number} <: ParamUpdater
     mom::T              # momentum
@@ -15,8 +17,8 @@ end
 SGD{T}(::Type{T}, mom = T(0.0)) = SGD{T}(T(mom))
 SGD{T}(mom::T = 0.0) = SGD{T}(mom)
 
-function init(updater::SGD, model)
-    updater.lastchg = zeros(params(model))
+function init(updater::SGD, θ::AbstractVector)
+    updater.lastchg = zeros(θ)
     return
 end
 
@@ -49,8 +51,8 @@ end
 Adagrad{T}(::Type{T}, ϵ = 1e-2) = Adagrad{T}(T(ϵ))
 Adagrad() = Adagrad(Float64)
 
-function init(updater::Adagrad, model)
-    updater.G = zeros(params(model))
+function init(updater::Adagrad, θ::AbstractVector)
+    updater.G = zeros(θ)
     return
 end
 
@@ -78,8 +80,7 @@ end
 Adadelta{T}(::Type{T}, ϵ = 1e-2, ρ = 0.97) = Adadelta{T}(T(ϵ), T(ρ))
 Adadelta{T}(ϵ::T = 1e-2, ρ::T = 0.97) = Adadelta{T}(ϵ, ρ)
 
-function init(updater::Adadelta, model)
-    θ = params(model)
+function init(updater::Adadelta, θ::AbstractVector)
     updater.dmean = zeros(θ)
     updater.Gmean = zeros(θ)
     return
@@ -126,8 +127,7 @@ end
 Adam{T}(::Type{T}, ϵ = T(1e-8), ρ₁ = T(0.9), ρ₂ = T(0.999)) = Adam{T}(T(ϵ), T(ρ₁), T(ρ₂))
 Adam{T}(ϵ::T = 1e-8, ρ₁::T = 0.9, ρ₂::T = 0.999) = Adam{T}(ϵ, ρ₁, ρ₂)
 
-function init(updater::Adam, model)
-    θ = params(model)
+function init(updater::Adam, θ::AbstractVector)
     updater.m = zeros(θ)
     updater.v = zeros(θ)
     updater.ρ₁ᵗ = ones(θ)
@@ -170,8 +170,7 @@ end
 Adamax{T}(::Type{T}, ρ₁ = T(0.9), ρ₂ = T(0.999)) = Adamax{T}(T(ρ₁), T(ρ₂))
 Adamax{T}(ρ₁::T = 0.9, ρ₂::T = 0.999) = Adamax{T}(ρ₁, ρ₂)
 
-function init(updater::Adamax, model)
-    θ = params(model)
+function init(updater::Adamax, θ::AbstractVector)
     updater.m = zeros(θ)
     updater.u = zeros(θ)
     updater.ρ₁ᵗ = ones(θ)
@@ -205,8 +204,8 @@ RMSProp{T}(::Type{T}, γ = T(0.95)) = RMSProp{T}(T(γ))
 RMSProp{T}(γ::T) = RMSProp{T}(γ)
 RMSProp() = RMSProp{Float64}(0.95)
 
-function init(updater::RMSProp, model)
-    updater.g = ones(params(model))
+function init(updater::RMSProp, θ::AbstractVector)
+    updater.g = ones(θ)
     return
 end
 

@@ -45,6 +45,8 @@ export
 
     @with
 
+include("utils.jl")
+
 include("iteration.jl")
 using .Iteration
 
@@ -62,7 +64,6 @@ include("strategies.jl")
 include("gradients/gradients.jl")
 include("gradients/online_gradients.jl")
 
-include("utils.jl")
 
 # ---------------------------------------------------------------------------------
 

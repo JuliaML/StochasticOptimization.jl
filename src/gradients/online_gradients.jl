@@ -6,7 +6,7 @@ average gradient over those `k` samples.
 type OnlineGradAvg{PU <: ParamUpdater} <: LearningStrategy
     lr::Float64
     pu::PU
-    i::Int # current step
+    idx::Int # current step
     k::Int # number of steps to average
     ∇avg::Vector{Float64}
     # OnlineGradAvg(lr::Float64, pu::PU, k::Int) = new(lr, pu, 1, k)
@@ -17,39 +17,46 @@ function OnlineGradAvg(k::Int; lr::Number = 1e-2, pu::ParamUpdater = RMSProp())
 end
 
 # initialize
-function pre_hook(ga::OnlineGradAvg, model)
-    ga.i = 1
-    init(ga.pu, model)
-    ga.∇avg = zeros(length(grad(model)))
+@with ga function pre_hook(ga::OnlineGradAvg, model::Learnable)
+    idx = 1
+    init(pu, model)
+    ∇avg = zeros(length(grad(model)))
+end
+
+# initialize
+@with ga function pre_hook(ga::OnlineGradAvg, θ::AbstractVector)
+    idx = 1
+    init(pu, θ)
+    ∇avg = zeros(θ)
+end
+
+function learn!(model::Learnable, ga::OnlineGradAvg)
+    learn!(params(model), ga, grad(model))
 end
 
 # one iteration update... we assume θ/∇ are pre-populated
-function learn!(model, ga::OnlineGradAvg, unused)
-    θ = params(model)
-    ∇ = grad(model)
-    ∇avg = ga.∇avg
-
+@with ga function learn!(θ, ga::OnlineGradAvg, ∇)
     # add the ∇
     @simd for i in 1:length(∇)
         @inbounds ∇avg[i] += ∇[i]
     end
 
     # is it time to update θ?
-    if ga.i >= ga.k
+    if idx >= k
 
         # convert sums to means
-        scalar = 1 / ga.k
+        scalar = 1 / k
         for i in eachindex(∇avg)
             @inbounds ∇avg[i] *= scalar
         end
 
         # update the params using the search direction
-        update!(θ, ga.pu, ∇avg, ga.lr)
+        update!(θ, pu, ∇avg, lr)
 
         # reset
         fill!(∇avg, 0.0)
-        ga.i = 1
+        idx = 1
     else
-        ga.i += 1
+        idx += 1
     end
 end
