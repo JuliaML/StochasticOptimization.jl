@@ -41,7 +41,9 @@ export
     Adadelta,
     Adam,
     Adamax,
-    RMSProp
+    RMSProp,
+
+    @with
 
 include("iteration.jl")
 using .Iteration
@@ -59,6 +61,8 @@ abstract LearningStrategy
 include("strategies.jl")
 include("gradients/gradients.jl")
 include("gradients/online_gradients.jl")
+
+include("utils.jl")
 
 # ---------------------------------------------------------------------------------
 
