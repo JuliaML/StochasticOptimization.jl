@@ -1,8 +1,12 @@
 
-module Iteration
+#= --------------------------------------------------------------------------
+WARNING: this is an alternate implementation to the iteration interface in MLDataUtils
+        and is not as well documented or maintained.  The key difference is that these
+        functions return "iterators" over an observation/batch/batches, and you usually
+        have to "get" the underlying iterate yourself.
+ --------------------------------------------------------------------------=#
 
-# NOTE: this all belongs in MLDataUtils.  It was originated as a PR to that package,
-#   but I'm instead experimenting with the concepts here
+module Iteration
 
 # Here's the API, as copied from https://github.com/JuliaML/MLDataUtils.jl/issues/3#issuecomment-247786693
 
