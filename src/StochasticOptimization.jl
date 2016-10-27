@@ -2,9 +2,8 @@ __precompile__(true)
 
 module StochasticOptimization
 
-using Reexport
-@reexport using LearnBase
-
+# using Reexport
+using LearnBase
 import LearnBase: value, learn!, update!
 
 export
