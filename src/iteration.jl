@@ -140,7 +140,7 @@ end
 # add support for arbitrary tuples
 nobs(tup::Tuple) = nobs(tup[1])
 getobs(tup::Tuple, idx) = map(a -> getobs(a, idx), tup)
-Base.collect(tup::Tuple) = map(collect, tup)
+# Base.collect(tup::Tuple) = map(collect, tup)
 
 # specialized for empty tuples
 nobs(tup::Tuple{}) = 0
@@ -172,6 +172,7 @@ Base.get(itr::ObsIterator) = getobs(itr.source, all_indices(itr))
 
 # copies
 Base.collect(itr::ObsIterator) = collect(get(itr))
+Base.collect{S<:Tuple}(itr::ObsIterator{S}) = map(collect, get(itr))
 
 # ----------------------------------------------------------------------------
 
