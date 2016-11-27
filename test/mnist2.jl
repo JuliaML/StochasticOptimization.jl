@@ -76,12 +76,13 @@ function doit()
     # At this point we have train and test where each column of x is length-784 corresponding to pixel intensities,
     # and each column of y is length-10 corresponding to output class.
 
-    nin, nh, nout = 784, [200], 10
+    nin, nh, nout = 784, [100], 10
 
     # build our objective from a neural net with nh hidden nodes and cross-entropy loss
     # NOTE: cross entropy loss is assumed from the softmax output
-    t = nnet(nin, nout, nh, :softplus, :softmax)
-    penalty = ElasticNetPenalty(1e-5)
+    t = nnet(nin, nout, nh, :relu, :softmax)
+    # penalty = ElasticNetPenalty(1e-5)
+    penalty = L2Penalty(1e-5)
     obj = objective(t, penalty)
     @show obj
 
@@ -89,12 +90,10 @@ function doit()
     # this section is ONLY FOR PLOTTING
     # it can be skipped completely if you only care about learning the model
 
+    # the parts of the plot
     chainplt = ChainPlot(t, maxn=100)
-
-    # loss/accuracy plots
     lossplt = TracePlot(title="Test Loss", ylim=(0,Inf))
     accuracyplt = TracePlot(title="Accuracy", ylim=(0.6,1))
-
     hmplt = heatmap(rand(28,28), ratio=1)
 
     # put together the full plot... a ChainPlot with loss, accuracy, and the heatmap
@@ -113,12 +112,12 @@ function doit()
     tracer = IterFunction((obj, i) -> begin
         # sample points from the test set and compute/save the loss
         @show i
-        # if mod1(i,500)==500
-            totloss, accuracy = my_test_loss(obj, test, 500)
+        if mod1(i,500)==500
+            totloss, accuracy = my_test_loss(obj, test, 200)
             @show totloss, accuracy
             push!(lossplt, i, totloss)
             push!(accuracyplt, i, accuracy)
-        # end
+        end
 
         # add transformation data
         update!(chainplt)
@@ -156,7 +155,7 @@ function doit()
     # create a gradient descent learner
     learner = make_learner(
         # averages the gradient over minibatches, updating params using Adadelta method
-        GradientLearner(5e-1, Adadelta()),
+        GradientLearner(1e-2, Adam()),
 
         # our custom iteration method
         tracer,
