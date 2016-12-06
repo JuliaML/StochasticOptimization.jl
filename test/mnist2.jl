@@ -1,6 +1,6 @@
 module MnistTest
 
-# this re-exports Transformations, StochasticOptimization, Penalties, and ObjectiveFunctions
+# this re-exports Transformations, StochasticOptimization, PenaltyFunctions, and ObjectiveFunctions
 using Learn
 
 # my version of ML iteration.  Hopefully will be replaced with what's currently in MLDataUtils dev branch
