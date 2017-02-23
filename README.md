@@ -1,6 +1,6 @@
 # StochasticOptimization
 
-[![Build Status](https://travis-ci.org/JuliaML/StochasticOptimization.jl.svg?branch=master)](https://travis-ci.org/JuliaML/StochasticOptimization.jl)
+[![Build Status](https://travis-ci.org/JuliaML/StochasticOptimization.jl.svg?branch=master)](https://travis-ci.org/JuliaML/StochasticOptimization.jl)  [![Gitter chat](https://badges.gitter.im/JuliaML/chat.png)](https://gitter.im/JuliaML/chat)
 
 Utilizing the JuliaML ecosystem, StochasticOptimization is a framework for iteration-based optimizers.  Below is a complete example, from creating transformations, losses, penalties, and the combined objective function, to building custom sub-learners for the optimization, to constructing and running a stochastic gradient descent learner.
 
