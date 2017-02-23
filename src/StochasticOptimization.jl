@@ -2,33 +2,36 @@ __precompile__(true)
 
 module StochasticOptimization
 
-# using Reexport
+using Reexport
 using LearnBase
 import LearnBase: value, learn!, update!
 
-export
-    LearningStrategy,
-    MetaLearner,
-    make_learner,
+@reexport using LearningStrategies
+import LearningStrategies: pre_hook, iter_hook, finished, post_hook
 
-    MaxIter,
-    TimeLimit,
-    ConvergenceFunction,
-    IterFunction,
-    ShowStatus,
-    Tracer,
-    Converged,
-    ConvergedTo,
+export
+    # LearningStrategy,
+    # MetaLearner,
+    # make_learner,
+    #
+    # MaxIter,
+    # TimeLimit,
+    # ConvergenceFunction,
+    # IterFunction,
+    # ShowStatus,
+    # Tracer,
+    # Converged,
+    # ConvergedTo,
 
     GradientLearner,
     OnlineGradAvg,
     SearchDirection,
     GradientAverager,
 
-    pre_hook,
-    iter_hook,
-    post_hook,
-    finished,
+    # pre_hook,
+    # iter_hook,
+    # post_hook,
+    # finished,
 
     LearningRate,
     FixedLR,
@@ -57,9 +60,9 @@ include("learningrates.jl")
 abstract ParamUpdater
 include("paramupdaters.jl")
 
-"Holds optimizer state and parameters"
-abstract LearningStrategy
-include("strategies.jl")
+# "Holds optimizer state and parameters"
+# abstract LearningStrategy
+# include("strategies.jl")
 include("gradients/gradients.jl")
 include("gradients/online_gradients.jl")
 
