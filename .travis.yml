@@ -12,5 +12,6 @@ notifications:
 script:
  - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
  - julia -e 'Pkg.init(); Pkg.clone("https://github.com/JuliaML/Transformations.jl"); Pkg.build("Transformations")'
+ - julia -e 'Pkg.init(); Pkg.clone("https://github.com/JuliaML/ObjectiveFunctions.jl"); Pkg.build("ObjectiveFunctions")'
  - julia -e 'Pkg.add("Plots"); Pkg.checkout("Plots"); Pkg.build("Plots")'
  - julia -e 'Pkg.clone(pwd()); Pkg.test("StochasticOptimization"; coverage=true)'
