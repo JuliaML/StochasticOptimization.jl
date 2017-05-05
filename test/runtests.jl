@@ -4,9 +4,10 @@ using Base.Test
 using ObjectiveFunctions
 using Transformations.TestTransforms
 using CatViews
+using MLDataPattern
 # using MLDataUtils
 
-include("tst_iteration.jl")
+# include("tst_iteration.jl")
 # Stop the tests
 # error()
 
@@ -122,7 +123,8 @@ end
         maxiter=5000,
     )
 
-    learn!(obj, learner, infinite_batches(inputs, targets, size=20))
+
+    learn!(obj, learner, RandomBatches(ObsView((inputs, targets)), size=20))
 
     # some summary output:
 
