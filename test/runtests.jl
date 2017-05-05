@@ -98,7 +98,7 @@ end
     # build our objective
     t = Affine(nin,nout)
     l = L2DistLoss()
-    p = L1Penalty(1e-8)
+    p = scaled(L1Penalty(), 1e-8)
     obj = objective(t, l, p)
 
     # create some fake data... affine transform plus noise
