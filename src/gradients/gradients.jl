@@ -51,9 +51,8 @@ immutable GradientLearner{LR <: LearningRate, PU <: ParamUpdater, SD <: SearchDi
 end
 
 function GradientLearner(lr::LearningRate = FixedLR(1e-1),
-                         pu::ParamUpdater = RMSProp(),
-                         sd::SearchDirection = GradientAverager())
-    GradientLearner(lr, pu, sd)
+                         pu::ParamUpdater = RMSProp())
+    GradientLearner(lr, pu, GradientAverager())
 end
 # function GradientLearner(pu::ParamUpdater,
 #                          lr::LearningRate = FixedLR(1e-3),
