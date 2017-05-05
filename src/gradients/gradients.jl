@@ -21,7 +21,7 @@ function search_direction(model, ga::GradientAverager, obs)
 end
 
 # for a minibatch, compute the average gradient
-function search_direction(model, ga::GradientAverager, batch::ObsIterator)
+function search_direction(model, ga::GradientAverager, batch::AbstractObsIterator)
     fill!(ga.∇avg, 0.0)
     scalar = 1 / nobs(batch)
     ∇ = grad(model)
