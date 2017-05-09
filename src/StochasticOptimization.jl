@@ -50,9 +50,6 @@ export
 
 include("utils.jl")
 
-# include("iteration.jl")
-# using .Iteration
-
 "Enacts a strategy to adjust the learning rate"
 @compat abstract type LearningRate end
 include("learningrates.jl")
