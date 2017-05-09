@@ -5,3 +5,4 @@ LearnBase
 Iterators
 LearningStrategies
 MLDataPattern
+Compat 0.17  # for new type syntax

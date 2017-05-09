@@ -3,7 +3,7 @@
 An abstraction that knows how to update a model and compute a search
 direction (gradient estimate).
 """
-abstract SearchDirection <: LearningStrategy
+@compat abstract type SearchDirection <: LearningStrategy end
 
 type GradientAverager <: SearchDirection
     ∇avg::Vector{Float64}

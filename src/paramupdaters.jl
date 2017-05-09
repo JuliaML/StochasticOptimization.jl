@@ -12,7 +12,7 @@ init(updater::ParamUpdater, model::Learnable) = init(updater, params(model))
 type SGD{T<:Number} <: ParamUpdater
     mom::T              # momentum
     lastchg::Vector{T}   # most recent grad change
-    SGD(mom::T) = new(mom)
+    (::Type{SGD{T}}){T <: Number}(mom::T) = new{T}(mom)
 end
 SGD{T}(::Type{T}, mom = T(0.0)) = SGD{T}(T(mom))
 SGD{T}(mom::T = 0.0) = SGD{T}(mom)
@@ -46,7 +46,7 @@ end
 type Adagrad{T<:Number} <: ParamUpdater
     ϵ::T
     G::Vector{T}  # sum of squared gradients
-    Adagrad(ϵ::T) = new(ϵ)
+    (::Type{Adagrad{T}}){T <: Number}(ϵ::T) = new{T}(ϵ)
 end
 Adagrad{T}(::Type{T}, ϵ = 1e-2) = Adagrad{T}(T(ϵ))
 Adagrad() = Adagrad(Float64)
@@ -75,7 +75,7 @@ type Adadelta{T<:Number} <: ParamUpdater
     ρ::T
     dmean::Vector{T} # exponential average of squared param changes
     Gmean::Vector{T} # exponential average of squared gradients
-    Adadelta(ϵ::T, ρ::T) = new(ϵ, ρ)
+    (::Type{Adadelta{T}}){T<:Number}(ϵ::T, ρ::T) = new{T}(ϵ, ρ)
 end
 Adadelta{T}(::Type{T}, ϵ = 1e-2, ρ = 0.97) = Adadelta{T}(T(ϵ), T(ρ))
 Adadelta{T}(ϵ::T = 1e-2, ρ::T = 0.97) = Adadelta{T}(ϵ, ρ)
@@ -122,7 +122,7 @@ type Adam{T<:Number} <: ParamUpdater
     v::Vector{T} # average second moment
     ρ₁ᵗ::Vector{T} # β₁ᵗ from the paper... t-th power of β₁
     ρ₂ᵗ::Vector{T} # β₂ᵗ from the paper... t-th power of β₂
-    Adam(ϵ::T, ρ₁::T, ρ₂::T) = new(ϵ, ρ₁, ρ₂)
+    (::Type{Adam{T}}){T<:Number}(ϵ::T, ρ₁::T, ρ₂::T) = new{T}(ϵ, ρ₁, ρ₂)
 end
 Adam{T}(::Type{T}, ϵ = T(1e-8), ρ₁ = T(0.9), ρ₂ = T(0.999)) = Adam{T}(T(ϵ), T(ρ₁), T(ρ₂))
 Adam{T}(ϵ::T = 1e-8, ρ₁::T = 0.9, ρ₂::T = 0.999) = Adam{T}(ϵ, ρ₁, ρ₂)
@@ -165,7 +165,7 @@ type Adamax{T<:Number} <: ParamUpdater
     m::Vector{T} # average first moment
     u::Vector{T} # average second moment
     ρ₁ᵗ::Vector{T} # β₁ᵗ from the paper... t-th power of β₁
-    Adamax(ρ₁::T, ρ₂::T) = new(ρ₁, ρ₂)
+    (::Type{Adamax{T}}){T<:Number}(ρ₁::T, ρ₂::T) = new{T}(ρ₁, ρ₂)
 end
 Adamax{T}(::Type{T}, ρ₁ = T(0.9), ρ₂ = T(0.999)) = Adamax{T}(T(ρ₁), T(ρ₂))
 Adamax{T}(ρ₁::T = 0.9, ρ₂::T = 0.999) = Adamax{T}(ρ₁, ρ₂)
@@ -198,7 +198,7 @@ end
 type RMSProp{T<:Number} <: ParamUpdater
     γ::T # exponential weight of ∇² avg
     g::Vector{T}  # the exponential mean
-    RMSProp(γ::T) = new(γ)
+    (::Type{RMSProp{T}}){T<:Number}(γ::T) = new{T}(γ)
 end
 RMSProp{T}(::Type{T}, γ = T(0.95)) = RMSProp{T}(T(γ))
 RMSProp{T}(γ::T) = RMSProp{T}(γ)
