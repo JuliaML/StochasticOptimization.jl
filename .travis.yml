@@ -4,11 +4,14 @@ os:
   - linux
   # - osx
 julia:
-  - 0.5
+  - 0.6
+  - nightly
 notifications:
   email: false
 # uncomment the following lines to override the default test script
 script:
  - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
- # - julia -e 'Pkg.clone("https://github.com/tbreloff/MetaPkg.jl"); import MetaPkg; MetaPkg.setprotocol!("https"); MetaPkg.add("MetaLearn"); MetaPkg.checkout("MetaLearn")'
- - julia -e 'Pkg.clone(pwd()); Pkg.clone("https://github.com/JuliaML/Learn.jl"); Pkg.build("Learn");  Pkg.test("StochasticOptimization"; coverage=true)'
+ - julia -e 'Pkg.init(); Pkg.clone("https://github.com/JuliaML/Transformations.jl"); Pkg.build("Transformations")'
+ - julia -e 'Pkg.init(); Pkg.clone("https://github.com/JuliaML/ObjectiveFunctions.jl"); Pkg.build("ObjectiveFunctions")'
+ - julia -e 'Pkg.add("Plots"); Pkg.checkout("Plots"); Pkg.build("Plots")'
+ - julia -e 'Pkg.clone(pwd()); Pkg.test("StochasticOptimization"; coverage=true)'

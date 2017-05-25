@@ -3,7 +3,7 @@
 An abstraction that knows how to update a model and compute a search
 direction (gradient estimate).
 """
-abstract SearchDirection <: LearningStrategy
+@compat abstract type SearchDirection <: LearningStrategy end
 
 type GradientAverager <: SearchDirection
     ∇avg::Vector{Float64}
@@ -21,7 +21,7 @@ function search_direction(model, ga::GradientAverager, obs)
 end
 
 # for a minibatch, compute the average gradient
-function search_direction(model, ga::GradientAverager, batch::ObsIterator)
+function search_direction(model, ga::GradientAverager, batch::AbstractObsIterator)
     fill!(ga.∇avg, 0.0)
     scalar = 1 / nobs(batch)
     ∇ = grad(model)
@@ -51,9 +51,8 @@ immutable GradientLearner{LR <: LearningRate, PU <: ParamUpdater, SD <: SearchDi
 end
 
 function GradientLearner(lr::LearningRate = FixedLR(1e-1),
-                         pu::ParamUpdater = RMSProp(),
-                         sd::SearchDirection = GradientAverager())
-    GradientLearner(lr, pu, sd)
+                         pu::ParamUpdater = RMSProp())
+    GradientLearner(lr, pu, GradientAverager())
 end
 # function GradientLearner(pu::ParamUpdater,
 #                          lr::LearningRate = FixedLR(1e-3),

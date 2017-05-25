@@ -2,6 +2,7 @@ __precompile__(true)
 
 module StochasticOptimization
 
+using Compat: @compat
 using Reexport
 using LearnBase
 import LearnBase: value, learn!, update!
@@ -49,20 +50,13 @@ export
 
 include("utils.jl")
 
-include("iteration.jl")
-using .Iteration
-
 "Enacts a strategy to adjust the learning rate"
-abstract LearningRate
+@compat abstract type LearningRate end
 include("learningrates.jl")
 
 "An algorithm to update paramaters using a gradient (i.e. SGD, Adam, Adagrad, etc)"
-abstract ParamUpdater
+@compat abstract type ParamUpdater end
 include("paramupdaters.jl")
-
-# "Holds optimizer state and parameters"
-# abstract LearningStrategy
-# include("strategies.jl")
 include("gradients/gradients.jl")
 include("gradients/online_gradients.jl")
 

@@ -4,9 +4,10 @@ using Base.Test
 using ObjectiveFunctions
 using Transformations.TestTransforms
 using CatViews
+using MLDataPattern
 # using MLDataUtils
 
-include("tst_iteration.jl")
+# include("tst_iteration.jl")
 # Stop the tests
 # error()
 
@@ -98,7 +99,7 @@ end
     # build our objective
     t = Affine(nin,nout)
     l = L2DistLoss()
-    p = L1Penalty(1e-8)
+    p = scaled(L1Penalty(), 1e-8)
     obj = objective(t, l, p)
 
     # create some fake data... affine transform plus noise
@@ -122,7 +123,8 @@ end
         maxiter=5000,
     )
 
-    learn!(obj, learner, infinite_batches(inputs, targets, size=20))
+
+    learn!(obj, learner, RandomBatches(ObsView((inputs, targets)), size=20))
 
     # some summary output:
 
