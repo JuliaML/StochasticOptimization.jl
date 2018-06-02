@@ -2,7 +2,7 @@
 """
 Recursively replace all occurences of a field with dot notation:
 ```julia
-type T
+mutable struct T
     a
     b
 end
