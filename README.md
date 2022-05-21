@@ -1,3 +1,7 @@
+# DEPRECATED
+
+This package is deprecated.
+
 # StochasticOptimization
 
 [![Build Status](https://travis-ci.org/JuliaML/StochasticOptimization.jl.svg?branch=master)](https://travis-ci.org/JuliaML/StochasticOptimization.jl)  [![Gitter chat](https://badges.gitter.im/JuliaML/chat.png)](https://gitter.im/JuliaML/chat)
